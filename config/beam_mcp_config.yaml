@@ -1,0 +1,86 @@
+service:
+  name: beam-mcp
+  type: beam
+  description: Apache Beam MCP Server
+
+default_runner: dataflow
+
+runners:
+  dataflow:
+    enabled: true
+    default_project: ${GCP_PROJECT_ID}
+    default_region: ${GCP_REGION}
+    default_temp_location: gs://${GCP_BUCKET}/temp
+    options:
+      maxWorkers: 5
+      machineType: n1-standard-2
+      serviceAccount: ${SERVICE_ACCOUNT}
+      workerDiskType: compute.googleapis.com/projects/${GCP_PROJECT_ID}/zones/${GCP_ZONE}/diskTypes/pd-ssd
+      workerDiskSize: 30
+  
+  spark:
+    enabled: true
+    spark_master: ${SPARK_MASTER:-yarn}
+    options:
+      deploy-mode: cluster
+      executor-memory: 4g
+      executor-cores: 2
+      num-executors: 10
+      driver-memory: 2g
+      conf:
+        spark.dynamicAllocation.enabled: true
+  
+  flink:
+    enabled: true
+    jobmanager_address: ${FLINK_JOBMANAGER:-localhost:8081}
+    options:
+      jobmanager.memory.process.size: 4096m
+      taskmanager.memory.process.size: 4096m
+      taskmanager.numberOfTaskSlots: 4
+      parallelism.default: 8
+
+  direct:
+    enabled: true
+    options:
+      direct_num_workers: 4
+      direct_running_mode: multi_threading
+
+interfaces:
+  jobs:
+    enabled: true
+    batch_size: 100
+  
+  metrics:
+    enabled: true
+    retention_days: 30
+    aggregation_interval: 60  # seconds
+  
+  logs:
+    enabled: true
+    retention_days: 7
+    max_entries_per_request: 1000
+  
+  savepoints:
+    enabled: true
+    default_savepoint_dir: gs://${GCP_BUCKET}/savepoints
+    auto_savepoint_interval: 3600  # seconds, 0 to disable
+
+security:
+  auth_enabled: ${AUTH_ENABLED:-false}
+  auth_type: ${AUTH_TYPE:-none}  # none, basic, oauth, iap
+  allowed_origins:
+    - http://localhost:3000
+    - https://your-client-app.com
+  oauth:
+    client_id: ${OAUTH_CLIENT_ID}
+    client_secret: ${OAUTH_CLIENT_SECRET}
+    scopes:
+      - openid
+      - profile
+  
+logging:
+  level: ${LOG_LEVEL:-INFO}
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  output: console  # console, file
+  file_path: logs/beam_mcp.log
+  rotation: daily  # hourly, daily, weekly 

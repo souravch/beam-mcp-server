@@ -1,0 +1,25 @@
+version: '3'
+
+services:
+  beam-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/app/config
+      - ~/.config/gcloud:/root/.config/gcloud  # For Dataflow authentication
+    environment:
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-your-gcp-project}
+      - GCP_REGION=${GCP_REGION:-us-central1}
+      - DEFAULT_RUNNER=${DEFAULT_RUNNER:-dataflow}
+      - DEBUG=${DEBUG:-false}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s 
