@@ -1,0 +1,48 @@
+service:
+  name: beam-mcp
+  type: beam
+  description: Apache Beam MCP Server Test Configuration
+
+default_runner: direct
+
+runners:
+  direct:
+    enabled: true
+    options:
+      direct_num_workers: 4
+      direct_running_mode: multi_threading
+      temp_location: /tmp/beam-test
+      save_main_session: true
+
+  dataflow:
+    enabled: false
+
+  spark:
+    enabled: false
+
+  flink:
+    enabled: false
+
+interfaces:
+  jobs:
+    enabled: true
+    batch_size: 100
+  
+  metrics:
+    enabled: true
+    retention_days: 1
+    aggregation_interval: 10  # seconds
+  
+  logs:
+    enabled: true
+    retention_days: 1
+    max_entries_per_request: 1000
+  
+  savepoints:
+    enabled: false
+
+security:
+  auth_enabled: false
+  auth_type: none
+  allowed_origins:
+    - http://localhost:3000 

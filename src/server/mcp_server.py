@@ -1,8 +1,9 @@
 from typing import Dict, List, Optional
 from fastapi import HTTPException
-from mcp import FastMCP, Resource, Tool, Context, Capability
-from mcp.core import MCPResponse, MCPRequest, MCPError
-from mcp.protocol import ToolManifest, ToolCapability, OperationType
+from mcp.server.fastmcp import FastMCP
+from mcp import Resource, Tool, ServerCapabilities
+from mcp.types import ToolsCapability, ResourcesCapability
+from mcp import McpError as MCPError
 
 from .models.job import Job, JobParameters, JobStatus
 from .models.savepoint import Savepoint, SavepointRequest
@@ -16,17 +17,14 @@ class DataflowMCPServer(FastMCP):
             name="dataflow-mcp",
             version="1.0.0",
             description="Apache Beam Dataflow MCP Server",
-            capabilities=[
-                Capability.TOOL_DISCOVERY,    # Support tool discovery
-                Capability.CONTEXT_MANAGEMENT, # Support context management
-                Capability.STATE_MANAGEMENT,   # Support state management
-                Capability.ASYNC_OPERATIONS,   # Support async operations
-                Capability.BATCH_OPERATIONS,   # Support batch operations
-                Capability.STREAMING,          # Support streaming operations
-                Capability.MONITORING,         # Support monitoring
-                Capability.LOGGING,           # Support logging
-                Capability.ERROR_HANDLING     # Support error handling
-            ]
+            capabilities=ServerCapabilities(
+                tools=ToolsCapability(
+                    supported=True
+                ),
+                resources=ResourcesCapability(
+                    supported=True
+                )
+            )
         )
         self.settings = settings
         self.dataflow_client = DataflowClient(settings)
@@ -36,13 +34,7 @@ class DataflowMCPServer(FastMCP):
             Resource(
                 name="job",
                 description="Dataflow job resource",
-                operations=[
-                    OperationType.CREATE,
-                    OperationType.READ,
-                    OperationType.UPDATE,
-                    OperationType.DELETE,
-                    OperationType.LIST
-                ],
+                operations=["create", "read", "update", "delete", "list"],
                 schema=Job.schema()
             ),
             Resource(

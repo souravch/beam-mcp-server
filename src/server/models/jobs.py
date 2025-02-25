@@ -6,7 +6,7 @@ This module defines data models for job management operations.
 
 from typing import Dict, List, Optional, Any
 from datetime import datetime
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
 from .common import RunnerType, JobState, JobType
 
@@ -51,12 +51,27 @@ class JobParameters(BaseModel):
         description="Job type (BATCH or STREAMING)"
     )
     
-    @root_validator
-    def validate_job_source(cls, values):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "job_name": "daily-user-activity-analysis",
+                "runner_type": "DATAFLOW",
+                "pipeline_options": {
+                    "project": "my-gcp-project",
+                    "region": "us-central1"
+                },
+                "template_path": "gs://dataflow-templates/latest/Word_Count",
+                "job_type": "BATCH"
+            }
+        }
+    )
+    
+    @model_validator(mode='after')
+    def validate_job_source(self):
         """Validate that either template_path or code_path is provided."""
-        if not values.get('template_path') and not values.get('code_path'):
+        if not self.template_path and not self.code_path:
             raise ValueError("Either template_path or code_path must be provided")
-        return values
+        return self
 
 class JobInfo(BaseModel):
     """Job details."""
@@ -73,12 +88,40 @@ class JobInfo(BaseModel):
     code_path: Optional[str] = Field(None, description="Code path if used")
     runner_job_id: Optional[str] = Field(None, description="ID in the runner system")
     runner_job_url: Optional[str] = Field(None, description="URL to job in runner system")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "job_id": "job-12345",
+                "job_name": "daily-user-activity-analysis",
+                "runner_type": "DATAFLOW",
+                "create_time": "2023-05-01T12:00:00Z",
+                "update_time": "2023-05-01T12:05:00Z",
+                "current_state": "RUNNING",
+                "job_type": "BATCH",
+                "pipeline_options": {
+                    "project": "my-gcp-project",
+                    "region": "us-central1"
+                }
+            }
+        }
+    )
 
 class JobList(BaseModel):
     """List of jobs."""
     jobs: List[JobInfo] = Field(..., description="List of jobs")
     total_count: int = Field(..., description="Total number of jobs")
     next_page_token: Optional[str] = Field(None, description="Token for the next page")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "jobs": [],
+                "total_count": 0,
+                "next_page_token": None
+            }
+        }
+    )
 
 class JobUpdateParameters(BaseModel):
     """Parameters for updating a job."""
@@ -91,6 +134,15 @@ class JobUpdateParameters(BaseModel):
         None, 
         description="Runner-specific update options",
         example={"machineType": "n2-standard-4"}
+    )
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "scaling": {"maxWorkers": 20, "minWorkers": 5},
+                "update_options": {"machineType": "n2-standard-4"}
+            }
+        }
     )
 
 class SavepointParameters(BaseModel):
@@ -110,6 +162,16 @@ class SavepointParameters(BaseModel):
         description="Directory to store the savepoint",
         example="gs://my-bucket/savepoints/"
     )
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "drain": False,
+                "async_mode": True,
+                "savepoint_dir": "gs://my-bucket/savepoints/"
+            }
+        }
+    )
 
 class SavepointInfo(BaseModel):
     """Savepoint details."""
@@ -118,17 +180,51 @@ class SavepointInfo(BaseModel):
     create_time: str = Field(..., description="Creation time (ISO format)")
     state: str = Field(..., description="Savepoint state")
     location: str = Field(..., description="Storage location of the savepoint")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "savepoint_id": "sp-12345",
+                "job_id": "job-12345",
+                "create_time": "2023-05-01T12:00:00Z",
+                "state": "COMPLETED",
+                "location": "gs://my-bucket/savepoints/sp-12345"
+            }
+        }
+    )
 
 class SavepointList(BaseModel):
     """List of savepoints."""
     savepoints: List[SavepointInfo] = Field(..., description="List of savepoints")
     total_count: int = Field(..., description="Total number of savepoints")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "savepoints": [],
+                "total_count": 0
+            }
+        }
+    )
 
 class JobMetrics(BaseModel):
     """Detailed job metrics."""
     job_id: str = Field(..., description="Job ID")
     timestamp: str = Field(..., description="Timestamp of metrics collection (ISO format)")
     metrics: Dict[str, Any] = Field(..., description="Job metrics")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "job_id": "job-12345",
+                "timestamp": "2023-05-01T12:00:00Z",
+                "metrics": {
+                    "recordsProcessed": 1000000,
+                    "elementsProcessed": 2000000
+                }
+            }
+        }
+    )
 
 class LogEntry(BaseModel):
     """Log entry."""
@@ -138,8 +234,30 @@ class LogEntry(BaseModel):
     job_id: str = Field(..., description="Job ID")
     worker_id: Optional[str] = Field(None, description="Worker ID")
     step_name: Optional[str] = Field(None, description="Processing step name")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "timestamp": "2023-05-01T12:00:00Z",
+                "severity": "INFO",
+                "message": "Processing complete for file-001",
+                "job_id": "job-12345",
+                "worker_id": "worker-1",
+                "step_name": "ProcessFiles"
+            }
+        }
+    )
 
 class LogList(BaseModel):
     """List of log entries."""
     logs: List[LogEntry] = Field(..., description="List of log entries")
-    next_page_token: Optional[str] = Field(None, description="Token for the next page of logs") 
+    next_page_token: Optional[str] = Field(None, description="Token for the next page of logs")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "logs": [],
+                "next_page_token": None
+            }
+        }
+    ) 

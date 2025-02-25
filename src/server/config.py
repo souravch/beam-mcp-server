@@ -8,7 +8,8 @@ import os
 import yaml
 import logging
 from typing import Dict, Any, Optional
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings
 from functools import lru_cache
 
 logger = logging.getLogger(__name__)
