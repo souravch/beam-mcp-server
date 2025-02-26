@@ -21,10 +21,10 @@ class Settings(BaseSettings):
     service_version: str = "1.0.0"
     
     # Runner configuration
-    default_runner: str = Field(default="dataflow", description="Default runner to use for jobs")
+    default_runner: str = Field(default="direct", description="Default runner to use for jobs")
     
     # Google Cloud configuration
-    gcp_project_id: str = Field(..., description="Google Cloud project ID")
+    gcp_project_id: str = Field(default="servys", description="Google Cloud project ID")
     gcp_region: str = Field(default="us-central1", description="Google Cloud region")
     
     # Optional Spark configuration

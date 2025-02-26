@@ -14,7 +14,7 @@ from enum import Enum
 import time
 import asyncio
 from mcp import MCPClient, Context
-from mcp.core import MCPRequest, MCPResponse
+from src.server.models.common import MCPRequest, MCPResponse
 
 class RunnerType(str, Enum):
     """Type of runner for executing Apache Beam pipelines."""

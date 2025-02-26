@@ -9,7 +9,8 @@ from fastapi.testclient import TestClient
 import yaml
 
 from src.server.app import create_app
-from src.server.models import JobState, RunnerType, JobType
+from src.server.models.common import RunnerType, JobType
+from src.server.models.job import JobStatus
 
 # Load test configuration
 with open('config/test_config.yaml', 'r') as f:
@@ -67,7 +68,7 @@ async def test_direct_runner_workflow(test_client, test_pipeline_path):
     assert response.status_code == 200
     job = response.json()["data"]
     job_id = job["job_id"]
-    assert job["state"] == JobState.RUNNING
+    assert job["status"] == JobStatus.RUNNING
     
     # Wait for job completion (with timeout)
     max_attempts = 30
@@ -76,12 +77,12 @@ async def test_direct_runner_workflow(test_client, test_pipeline_path):
         response = test_client.get(f"/api/v1/jobs/{job_id}")
         assert response.status_code == 200
         job = response.json()["data"]
-        if job["state"] in [JobState.SUCCEEDED, JobState.FAILED]:
+        if job["status"] in [JobStatus.COMPLETED, JobStatus.FAILED]:
             break
         await asyncio.sleep(1)
         attempts += 1
     
-    assert job["state"] == JobState.SUCCEEDED
+    assert job["status"] == JobStatus.COMPLETED
     
     # Get job metrics
     response = test_client.get(f"/api/v1/jobs/{job_id}/metrics")
@@ -133,7 +134,7 @@ async def test_direct_runner_job_cancellation(test_client, test_pipeline_path):
     response = test_client.get(f"/api/v1/jobs/{job_id}")
     assert response.status_code == 200
     job = response.json()["data"]
-    assert job["state"] == JobState.CANCELLED
+    assert job["status"] == JobStatus.CANCELLED
 
 @pytest.mark.asyncio
 async def test_direct_runner_error_handling(test_client):

@@ -2,7 +2,7 @@
 Metrics models for the Dataflow MCP Server.
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Literal
 from enum import Enum
 from pydantic import Field, validator
 
@@ -17,7 +17,7 @@ class MetricType(str, Enum):
 
 class MetricValue(BaseMCPModel):
     """Value of a metric."""
-    mcp_resource_type: str = Field(default="metric_value", const=True)
+    mcp_resource_type: Literal["metric_value"] = Field(default="metric_value")
     
     value: float = Field(..., description="Current value of the metric")
     timestamp: str = Field(..., description="Timestamp when the value was recorded")
@@ -31,7 +31,7 @@ class MetricValue(BaseMCPModel):
 
 class Metric(BaseMCPModel):
     """Represents a job metric."""
-    mcp_resource_type: str = Field(default="metric", const=True)
+    mcp_resource_type: Literal["metric"] = Field(default="metric")
     
     name: str = Field(..., description="Name of the metric")
     type: MetricType = Field(..., description="Type of metric")
@@ -49,7 +49,7 @@ class Metric(BaseMCPModel):
 
 class JobMetrics(BaseMCPModel):
     """Collection of job metrics."""
-    mcp_resource_type: str = Field(default="job_metrics", const=True)
+    mcp_resource_type: Literal["job_metrics"] = Field(default="job_metrics")
     
     job_id: str = Field(..., description="ID of the job")
     metrics: List[Metric] = Field(..., description="List of job metrics")

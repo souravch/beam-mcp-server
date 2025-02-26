@@ -57,7 +57,7 @@ def create_app() -> FastAPI:
     mcp_server = DataflowMCPServer(settings)
     
     # Create FastAPI app using MCP server
-    app = mcp_server.get_app()
+    app = mcp_server.fastapi_app
     
     # Configure CORS
     app.add_middleware(

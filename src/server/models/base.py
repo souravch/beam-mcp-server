@@ -1,9 +1,13 @@
+"""
+Base models for the MCP server.
+"""
 from typing import Dict, Optional
 from datetime import datetime
-from pydantic import Field
-from mcp.core import MCPModel
+from uuid import UUID
 
-class BaseMCPModel(MCPModel):
+from pydantic import BaseModel, Field
+
+class BaseMCPModel(BaseModel):
     """Base model with common MCP fields."""
     
     # MCP protocol fields
@@ -21,6 +25,8 @@ class BaseMCPModel(MCPModel):
     
     class Config:
         """Pydantic model configuration."""
+        arbitrary_types_allowed = True
         json_encoders = {
-            datetime: lambda v: v.isoformat()
-        } 
+            datetime: lambda v: v.isoformat(),
+            UUID: str,
+        }

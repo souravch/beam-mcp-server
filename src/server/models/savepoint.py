@@ -2,7 +2,7 @@
 Savepoint models for the Dataflow MCP Server.
 """
 
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Literal
 from enum import Enum
 from pydantic import Field, validator
 
@@ -17,7 +17,7 @@ class SavepointStatus(str, Enum):
 
 class SavepointRequest(BaseMCPModel):
     """Request to create a savepoint."""
-    mcp_resource_type: str = Field(default="savepoint_request", const=True)
+    mcp_resource_type: Literal["savepoint_request"] = Field(default="savepoint_request")
     
     job_id: str = Field(..., description="ID of the job to create savepoint for")
     savepoint_path: str = Field(..., description="GCS path to store the savepoint")
@@ -37,7 +37,7 @@ class SavepointRequest(BaseMCPModel):
 
 class Savepoint(BaseMCPModel):
     """Represents a job savepoint."""
-    mcp_resource_type: str = Field(default="savepoint", const=True)
+    mcp_resource_type: Literal["savepoint"] = Field(default="savepoint")
     
     # Savepoint-specific fields
     savepoint_id: str = Field(..., description="Unique identifier for the savepoint")
@@ -64,7 +64,7 @@ class Savepoint(BaseMCPModel):
 
 class SavepointList(BaseMCPModel):
     """List of savepoints with pagination."""
-    mcp_resource_type: str = Field(default="savepoint_list", const=True)
+    mcp_resource_type: Literal["savepoint_list"] = Field(default="savepoint_list")
     
     savepoints: List[Savepoint] = Field(..., description="List of savepoints")
     total: int = Field(..., description="Total number of savepoints")

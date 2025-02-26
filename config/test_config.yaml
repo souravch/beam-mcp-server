@@ -5,6 +5,10 @@ service:
 
 default_runner: direct
 
+gcp:
+  project_id: servys
+  region: us-central1
+
 runners:
   direct:
     enabled: true

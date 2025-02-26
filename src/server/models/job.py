@@ -5,11 +5,13 @@ This module defines the data models for job execution and status tracking.
 """
 
 from enum import Enum
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, Literal
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 #from mcp.core import MCPModel
 from .base import BaseMCPModel
+from .base import BaseMCPModel
+from .jobs import JobParameters
 
 class JobStatus(str, Enum):
     """Status of a job."""
@@ -73,7 +75,7 @@ class JobMetrics(BaseModel):
 
 class JobParameters(BaseMCPModel):
     """Parameters for creating a job."""
-    mcp_resource_type: str = Field(default="job_parameters", const=True)
+    mcp_resource_type: Literal["job_parameters"] = Field(default="job_parameters")
     
     job_name: str = Field(..., description="Name of the job")
     pipeline_path: str = Field(..., description="Path to the pipeline code or template")
@@ -347,7 +349,7 @@ class JobCancelRequest(BaseModel):
 
 class Job(BaseMCPModel):
     """Represents a Dataflow job."""
-    mcp_resource_type: str = Field(default="job", const=True)
+    mcp_resource_type: Literal["job"] = Field(default="job")
     
     # Job-specific fields
     job_id: str = Field(..., description="Unique identifier for the job")
@@ -402,7 +404,7 @@ class Job(BaseMCPModel):
 
 class JobList(BaseMCPModel):
     """List of jobs with pagination."""
-    mcp_resource_type: str = Field(default="job_list", const=True)
+    mcp_resource_type: Literal["job_list"] = Field(default="job_list")
     
     jobs: List[Job] = Field(..., description="List of jobs")
     total: int = Field(..., description="Total number of jobs")

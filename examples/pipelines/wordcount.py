@@ -58,4 +58,5 @@ def run(pipeline_options: PipelineOptions) -> None:
     Args:
         pipeline_options: The pipeline options
     """
-    return create_pipeline(pipeline_options) 
+    pipeline = create_pipeline(pipeline_options)
+    pipeline.run().wait_until_finish() 

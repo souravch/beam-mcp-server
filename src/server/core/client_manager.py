@@ -517,4 +517,8 @@ class BeamClientManager:
                 }
             ))
         
-        return RunnerList(runners=runners) 
+        return RunnerList(
+            runners=runners,
+            default_runner=self.config.get('default_runner', 'direct'),
+            mcp_total_runners=len(runners)
+        ) 

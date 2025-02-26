@@ -2,9 +2,9 @@
 Runner models for the Dataflow MCP Server.
 """
 
-from typing import Dict, Optional, List
+from typing import Dict, List, Optional, Literal
 from enum import Enum
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 
 from .base import BaseMCPModel
 
@@ -22,34 +22,33 @@ class RunnerStatus(str, Enum):
     MAINTENANCE = "MAINTENANCE"
 
 class RunnerCapability(str, Enum):
-    """Capabilities supported by runners."""
+    """Capabilities supported by a runner."""
     BATCH = "batch"
     STREAMING = "streaming"
     AUTOSCALING = "autoscaling"
     MONITORING = "monitoring"
     SAVEPOINTS = "savepoints"
     CHECKPOINTING = "checkpointing"
-    STATE_MANAGEMENT = "state_management"
-    EXACTLY_ONCE = "exactly_once"
-    AT_LEAST_ONCE = "at_least_once"
+    METRICS = "metrics"
+    LOGGING = "logging"
 
 class Runner(BaseMCPModel):
     """Represents a pipeline runner."""
-    mcp_resource_type: str = Field(default="runner", const=True)
+    mcp_resource_type: Literal["runner"] = Field(default="runner")
     
     # Runner-specific fields
     name: str = Field(..., description="Name of the runner")
     runner_type: RunnerType = Field(..., description="Type of runner")
     status: RunnerStatus = Field(..., description="Current status of the runner")
     description: str = Field(..., description="Description of the runner")
-    capabilities: List[RunnerCapability] = Field(default_factory=list, description="List of runner capabilities")
+    capabilities: List[str] = Field(default_factory=list, description="List of runner capabilities")
     config: Dict = Field(default_factory=dict, description="Runner-specific configuration")
     version: str = Field(..., description="Runner version")
     default_region: Optional[str] = Field(None, description="Default region for the runner")
     supported_regions: List[str] = Field(default_factory=list, description="List of supported regions")
     
     # MCP-specific fields
-    mcp_provider: str = Field(..., description="Provider of the runner (e.g., Google, Apache)")
+    mcp_provider: str = Field(default="apache", description="Provider of the runner (e.g., Google, Apache)")
     mcp_cost_tier: str = Field(default="standard", description="Cost tier of the runner")
     mcp_min_workers: int = Field(default=1, description="Minimum number of workers")
     mcp_max_workers: int = Field(default=100, description="Maximum number of workers")
@@ -58,7 +57,7 @@ class Runner(BaseMCPModel):
     mcp_maintenance_window: Optional[Dict] = Field(None, description="Scheduled maintenance window")
     mcp_quotas: Dict = Field(default_factory=dict, description="Runner quotas and limits")
     
-    @validator('mcp_resource_id', pre=True, always=True)
+    @field_validator('mcp_resource_id', mode='before')
     def set_resource_id(cls, v, values):
         """Set resource ID from name if not provided."""
         if not v and 'name' in values:
@@ -67,7 +66,7 @@ class Runner(BaseMCPModel):
 
 class RunnerList(BaseMCPModel):
     """List of available runners."""
-    mcp_resource_type: str = Field(default="runner_list", const=True)
+    mcp_resource_type: Literal["runner_list"] = Field(default="runner_list")
     
     runners: List[Runner] = Field(..., description="List of runners")
     default_runner: str = Field(..., description="Name of the default runner")
