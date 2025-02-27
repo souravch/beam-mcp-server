@@ -25,13 +25,20 @@ This server can be used as a backend for AI/LLM tools that need to interact with
 
 ## MCP Protocol Compliance
 
-This server implements the Model Context Protocol (MCP) 1.0 standard, providing:
+This server fully implements the Model Context Protocol (MCP) 1.0 standard, providing:
 
+- **Full MCP Standard Implementation**: Complete compliance with the MCP 1.0 protocol specification
+- **Tool Registration**: Uses the standard `Tool` class with proper JSON schema
+- **Resource Registration**: Standard-compliant resource registration
+- **Context Handling**: Complete context support with session, transaction, and trace IDs
+- **MCP Transports**: Support for HTTP, STDIO, SSE, and WebSocket transports
 - **Tool Manifest**: Self-description via `/api/v1/manifest` endpoint
 - **Context Handling**: Stateful operations via MCP context
 - **Standardized Responses**: Consistent `LLMToolResponse` format
 - **Discoverability**: OpenAPI schema with MCP metadata
 - **LLM Integration**: Optimized for AI/LLM consumption
+
+See the [MCP Compliance Documentation](docs/mcp-compliance.md) for detailed information on how the server implements the MCP standard.
 
 ### MCP Context Headers
 
@@ -42,11 +49,35 @@ All API endpoints support the following MCP context headers:
 - `MCP-Transaction-ID`: Transaction identifier for multi-step operations
 - `MCP-User-ID`: User identifier
 
-### LLM-Specific Endpoints
+### MCP Endpoints
 
-- `/api/v1/manifest`: Get tool manifest for discovery
-- `/api/v1/context`: Get current MCP context
-- `/health/llm`: LLM-friendly health check
+- **Standard MCP Endpoints**:
+  - `/api/v1/manifest`: Get tool manifest for discovery
+  - `/api/v1/context`: Get current MCP context
+  - `/api/v1/health/mcp`: MCP-specific health check
+
+- **LLM-Specific Endpoints**:
+  - `/api/v1/health/llm`: LLM-friendly health check
+
+### Testing MCP Compliance
+
+To verify that the server is fully compliant with the MCP standard:
+
+```bash
+# Start the server
+python main.py
+
+# Check the manifest endpoint
+curl http://localhost:8080/api/v1/manifest
+
+# Test context propagation
+curl http://localhost:8080/api/v1/context \
+  -H "MCP-Session-ID: test-session-123" \
+  -H "MCP-Transaction-ID: test-transaction-456"
+  
+# Test MCP-specific health check
+curl http://localhost:8080/api/v1/health/mcp
+```
 
 ## Installation
 
@@ -84,6 +115,12 @@ service:
 
 default_runner: dataflow
 
+# MCP Settings
+mcp:
+  version: "1.0"
+  server_name: "beam-mcp-server"
+  provider: "apache"
+
 runners:
   dataflow:
     enabled: true
@@ -120,6 +157,9 @@ export GCP_PROJECT_ID=your-gcp-project
 export GCP_REGION=us-central1
 export DEFAULT_RUNNER=dataflow
 beam-mcp-server
+
+# Using MCP-specific options (for command-line tools)
+beam-mcp-server --mcp-stdio
 ```
 
 3. Access the API documentation:
@@ -235,6 +275,14 @@ curl -X POST http://localhost:8080/api/v1/jobs \
 - `DEBUG`: Enable debug mode (true/false)
 - `ENVIRONMENT`: Environment name (development/production)
 
+#### MCP-specific Environment Variables
+
+- `BEAM_MCP_MCP_VERSION`: MCP protocol version to use
+- `BEAM_MCP_MCP_SERVER_NAME`: MCP server name
+- `BEAM_MCP_MCP_PROVIDER`: MCP provider name
+- `BEAM_MCP_MCP_LOG_LEVEL`: MCP server log level
+- `BEAM_MCP_MCP_STREAMING_SUPPORT`: Enable MCP streaming (true/false)
+
 ### Configuration File
 
 See the `beam_mcp_config.yaml` example in the Quick Start section.
@@ -254,6 +302,17 @@ LLMs can discover capabilities through the manifest endpoint:
 ```bash
 curl http://localhost:8080/api/v1/manifest
 ```
+
+## MCP Command-Line Integration
+
+For command-line tools and scripts, the server supports the STDIO transport:
+
+```bash
+# Start the server in STDIO mode
+beam-mcp-server --mcp-stdio | your-mcp-tool
+```
+
+This allows integration with MCP-compatible tools and scripts through standard input/output.
 
 ## Contributing
 

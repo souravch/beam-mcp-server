@@ -1,10 +1,10 @@
 """
 MCP Server implementation for Apache Beam Dataflow.
 """
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from fastapi import HTTPException, FastAPI
 from mcp.server.fastmcp import FastMCP
-from mcp import Resource, ServerCapabilities, ToolsCapability, McpError as MCPError
+from mcp import Resource, ServerCapabilities, ToolsCapability, McpError as MCPError, Tool
 from mcp.types import ResourcesCapability
 from .models.jobs import JobParameters
 from .models.common import JobState, OperationType, MCPRequest, MCPResponse, MCPRequestParams
@@ -16,22 +16,43 @@ from .models.context import MCPContext
 from .services.dataflow_client import DataflowClient
 from .config import Settings
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
-class DataflowMCPServer(FastMCP):
+class BeamMCPServer(FastMCP):
+    """
+    Apache Beam MCP Server that implements the Model Context Protocol standard.
+    
+    This server provides a unified API for managing Apache Beam pipelines
+    across different runners (Dataflow, Spark, Flink, Direct).
+    """
     def __init__(self, settings: Settings):
-        super().__init__(settings)
+        """
+        Initialize the Beam MCP server.
+        
+        Args:
+            settings (Settings): Server configuration
+        """
+        # Initialize with FastMCP base class
+        super().__init__(
+            name="beam-mcp",
+            instructions="Manage Apache Beam pipelines across different runners",
+            **settings.dict()
+        )
+        
         self.settings = settings
         self.dataflow_client = DataflowClient(settings)
         self.app = FastAPI()
+        
+        # Set up MCP components
         self._setup_resources()
         self._setup_tools()
         self._setup_routes()
 
     def _setup_resources(self):
-        """Set up MCP resources."""
-        base_url = "http://localhost:8000"
+        """Set up MCP resources according to the MCP protocol standard."""
+        base_url = self.settings.base_url or "http://localhost:8000"
         resources = [
             Resource(
                 name="job",
@@ -74,30 +95,118 @@ class DataflowMCPServer(FastMCP):
                 ]
             )
         ]
-        self.resources = resources
+        
+        # Register resources with MCP
+        for resource in resources:
+            self._resource_manager.add_resource(resource)
 
     def _setup_tools(self):
-        """Set up MCP tools."""
-        self.tools = [
-            {
-                "name": "create_job",
-                "description": "Create a new Dataflow job",
-                "parameters": {
-                    "job_name": "string",
-                    "runner_type": "string",
-                    "job_type": "string",
-                    "code_path": "string",
-                    "pipeline_options": "object"
-                }
-            },
-            {
-                "name": "cancel_job",
-                "description": "Cancel a running Dataflow job",
-                "parameters": {
-                    "job_id": "string"
-                }
-            }
-        ]
+        """Set up MCP tools according to the MCP protocol standard."""
+        # Create functions for each tool
+        
+        # Create job function
+        async def create_job(job_name: str, runner_type: str, job_type: str, code_path: str, pipeline_options: Dict[str, Any] = None) -> Dict:
+            """
+            Create a new pipeline job.
+            
+            Args:
+                job_name: Unique name for the job
+                runner_type: Type of runner to use
+                job_type: Type of job (BATCH or STREAMING)
+                code_path: Path to pipeline code
+                pipeline_options: Runner-specific pipeline options
+                
+            Returns:
+                Job details
+            """
+            request = MCPRequest(
+                method="create_job",
+                params=MCPRequestParams(parameters={
+                    "job_name": job_name,
+                    "runner_type": runner_type,
+                    "job_type": job_type,
+                    "code_path": code_path,
+                    "pipeline_options": pipeline_options or {}
+                })
+            )
+            response = await self.create_job(request, MCPContext())
+            return response.data
+        
+        # Get job function
+        async def get_job(job_id: str) -> Dict:
+            """
+            Get job details.
+            
+            Args:
+                job_id: ID of the job to retrieve
+                
+            Returns:
+                Job details
+            """
+            request = MCPRequest(
+                method="get_job",
+                params=MCPRequestParams(parameters={"job_id": job_id})
+            )
+            response = await self.get_job(request, MCPContext())
+            return response.data
+        
+        # Cancel job function
+        async def cancel_job(job_id: str) -> Dict:
+            """
+            Cancel a running job.
+            
+            Args:
+                job_id: ID of the job to cancel
+                
+            Returns:
+                Cancellation status
+            """
+            request = MCPRequest(
+                method="cancel_job",
+                params=MCPRequestParams(parameters={"job_id": job_id})
+            )
+            response = await self.cancel_job(request, MCPContext())
+            return response.data
+        
+        # List runners function
+        async def list_runners() -> Dict:
+            """
+            List available runners.
+            
+            Returns:
+                List of available runners
+            """
+            request = MCPRequest(
+                method="list_runners",
+                params=MCPRequestParams()
+            )
+            response = await self.list_runners(request, MCPContext())
+            return response.data
+        
+        # Get metrics function
+        async def get_metrics(job_id: str) -> Dict:
+            """
+            Get job metrics.
+            
+            Args:
+                job_id: ID of the job to get metrics for
+                
+            Returns:
+                Job metrics
+            """
+            request = MCPRequest(
+                method="get_metrics",
+                params=MCPRequestParams(parameters={"job_id": job_id})
+            )
+            response = await self.get_metrics(request, MCPContext())
+            return response.data
+        
+        # Register tool functions with the tool manager
+        self._tool_manager.add_tool(create_job, description="Create a new pipeline job")
+        self._tool_manager.add_tool(get_job, description="Get job details")
+        self._tool_manager.add_tool(cancel_job, description="Cancel a running job")
+        self._tool_manager.add_tool(list_runners, description="List available runners")
+        self._tool_manager.add_tool(get_metrics, description="Get job metrics")
 
     def _setup_routes(self):
         """Set up FastAPI routes."""
@@ -161,8 +270,14 @@ class DataflowMCPServer(FastMCP):
         return self.app
 
     async def get_manifest(self, request: MCPRequest, context: MCPContext) -> MCPResponse:
-        """Get server manifest."""
+        """Get server manifest according to MCP protocol."""
         try:
+            # Get tools from the tool manager
+            tools = list(self._tool_manager._tools.values())
+            
+            # Get resources from the resource manager
+            resources = list(self._resource_manager._resources.values())
+            
             manifest = {
                 "name": "beam-mcp",
                 "version": "1.0.0",
@@ -170,7 +285,9 @@ class DataflowMCPServer(FastMCP):
                 "capabilities": {
                     "resources": ResourcesCapability(subscribe=True, listChanged=True),
                     "tools": ToolsCapability(listChanged=True)
-                }
+                },
+                "tools": [tool.model_dump() for tool in tools],
+                "resources": [resource.model_dump() for resource in resources]
             }
             return MCPResponse(data=manifest)
         except Exception as e:

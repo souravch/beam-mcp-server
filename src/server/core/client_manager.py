@@ -38,6 +38,40 @@ class BeamClientManager:
         self.jobs = {}
         self.savepoints = {}
     
+    async def initialize(self):
+        """
+        Initialize the client manager asynchronously.
+        Called during application startup.
+        """
+        logger.info("Initializing BeamClientManager")
+        # Initialize any async resources or connections here
+        
+        # Check that at least one runner client is available
+        if not any(client for client in self.clients.values()):
+            if not self.config.get('disable_client_check', False):
+                logger.warning("No runner clients are available. This may limit functionality.")
+        
+        return True
+    
+    async def cleanup(self):
+        """
+        Clean up resources when the application is shutting down.
+        Called during application shutdown.
+        """
+        logger.info("Cleaning up BeamClientManager resources")
+        # Clean up any resources or connections here
+        
+        # Close any client connections
+        for runner_name, client in self.clients.items():
+            if client and hasattr(client, 'close'):
+                try:
+                    await client.close()
+                    logger.info(f"Closed client for runner: {runner_name}")
+                except Exception as e:
+                    logger.error(f"Error closing client for runner {runner_name}: {str(e)}")
+        
+        return True
+    
     def init_clients(self):
         """Initialize runner clients based on configuration."""
         for runner_name, runner_config in self.config['runners'].items():
