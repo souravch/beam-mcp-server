@@ -1,0 +1,91 @@
+service:
+  name: beam-mcp
+  type: beam
+  description: Apache Beam MCP Server
+  version: 1.0.0
+
+default_runner: direct
+
+runners:
+  dataflow:
+    enabled: true
+    default_project: servys
+    default_region: us-central1
+    default_temp_location: /tmp/beam-dataflow-temp
+    options:
+      maxWorkers: 5
+      machineType: n1-standard-2
+      workerDiskSize: 30
+  
+  direct:
+    enabled: true
+    options:
+      direct_num_workers: 4
+      direct_running_mode: multi_threading
+      temp_location: /tmp/beam-direct-temp
+      
+  flink:
+    enabled: true
+    jobmanager_url: http://localhost:8081
+    flink_master: localhost:8081
+    options:
+      parallelism.default: 4
+      taskmanager.numberOfTaskSlots: 4
+      taskmanager.memory.process.size: 1024m
+      jobmanager.memory.process.size: 1024m
+      savepoint.path: /tmp/beam-flink-savepoints
+      
+  spark:
+    enabled: true
+    spark_master: local[*]
+    options:
+      spark.executor.instances: 2
+      spark.executor.cores: 2
+      spark.executor.memory: 1g
+      spark.driver.memory: 1g
+      temp_location: /tmp/beam-spark-temp
+
+# Generic job templates for different types
+job_templates:
+  wordcount:
+    type: BATCH
+    description: "Word count example job"
+    default_runner: direct
+    code_path: examples/pipelines/wordcount.py
+    default_options:
+      input: examples/input.txt
+      output: output/wordcount-output
+      
+  streaming_wordcount:
+    type: STREAMING
+    description: "Streaming word count example job"
+    default_runner: flink
+    code_path: examples/pipelines/streaming_wordcount.py
+    default_options:
+      input_topic: test-input
+      output_topic: test-output
+      window_size: 10
+
+interfaces:
+  jobs:
+    enabled: true
+  
+  metrics:
+    enabled: true
+  
+  logs:
+    enabled: true
+  
+  savepoints:
+    enabled: true
+    default_savepoint_dir: /tmp/beam-savepoints
+
+mcp:
+  version: 1.0
+  server_name: beam-mcp-server
+  provider: apache
+  log_level: INFO
+
+gcp:
+  project_id: servys
+  region: us-central1 

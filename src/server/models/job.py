@@ -6,7 +6,7 @@ This module defines the data models for job execution and status tracking.
 
 from enum import Enum
 from typing import Dict, List, Optional, Any, Union, Literal
-from datetime import datetime
+from datetime import datetime, UTC
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 #from mcp.core import MCPModel
 from .base import BaseMCPModel
@@ -368,7 +368,7 @@ class Job(BaseMCPModel):
     region: str = Field(..., description="Google Cloud region")
     status: JobStatus = Field(..., description="Current status of the job")
     create_time: str = Field(..., description="Job creation timestamp")
-    update_time: str = Field(..., description="Job last update timestamp")
+    update_time: str = Field(default_factory=lambda: datetime.now(UTC).isoformat(), description="Job last update timestamp")
     start_time: Optional[str] = Field(None, description="Job start timestamp")
     end_time: Optional[str] = Field(None, description="Job end timestamp")
     runner: str = Field(..., description="Runner used for the job")

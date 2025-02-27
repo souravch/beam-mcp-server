@@ -69,7 +69,10 @@ class JobParameters(BaseModel):
     @model_validator(mode='after')
     def validate_job_source(self):
         """Validate that either template_path or code_path is provided."""
-        if not self.template_path and not self.code_path:
+        template_path = getattr(self, 'template_path', None)
+        code_path = getattr(self, 'code_path', None)
+        
+        if not template_path and not code_path:
             raise ValueError("Either template_path or code_path must be provided")
         return self
 

@@ -38,6 +38,7 @@ class DataflowClient:
                     region="local",
                     status=JobStatus.RUNNING,
                     create_time=datetime.utcnow().isoformat(),
+                    update_time=datetime.utcnow().isoformat(),
                     runner=params.runner_type.value,
                     job_type=params.job_type,
                     pipeline_options=params.pipeline_options,
@@ -67,10 +68,19 @@ class DataflowClient:
             # For Dataflow runner, get project and region from pipeline options
             project = params.pipeline_options.get("project")
             region = params.pipeline_options.get("region")
+            
+            # Use settings values as fallbacks if not provided in pipeline options
             if not project:
-                raise ValueError("Project ID is required in pipeline_options for Dataflow runner")
+                project = self.settings.gcp_project_id
+                if not project or project == "your-gcp-project-id":
+                    raise ValueError("Project ID is required in pipeline_options for Dataflow runner")
+                # Add to pipeline options
+                params.pipeline_options["project"] = project
+                
             if not region:
-                raise ValueError("Region is required in pipeline_options for Dataflow runner")
+                region = self.settings.gcp_region
+                # Add to pipeline options
+                params.pipeline_options["region"] = region
 
             # Convert parameters to Dataflow job
             job = DataflowJob()
@@ -104,6 +114,7 @@ class DataflowClient:
                 region=response.location,
                 status=JobStatus.PENDING,
                 create_time=response.create_time.isoformat(),
+                update_time=datetime.utcnow().isoformat(),
                 runner=params.runner_type.value,
                 job_type=params.job_type,
                 pipeline_options=pipeline_options,

@@ -320,4 +320,271 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Multi-Runner Support
+
+The Apache Beam MCP Server supports multiple runners:
+
+- Direct (local development)
+- Apache Flink
+- Apache Spark
+- Google Cloud Dataflow
+
+### Configuration
+
+To configure the server for different runners, modify the configuration file in `config/flink_config.yaml` or create your own configuration file:
+
+```yaml
+service:
+  name: beam-mcp
+  type: beam
+  description: Apache Beam MCP Server
+  version: 1.0.0
+
+default_runner: direct  # Change to flink, spark, or dataflow as needed
+
+runners:
+  # Direct runner configuration
+  direct:
+    enabled: true
+    pipeline_options:
+      direct_num_workers: 4
+      direct_running_mode: multi_threading
+      temp_location: /tmp/beam-direct-temp
+      save_main_session: true
+      
+  # Flink runner configuration
+  flink:
+    enabled: true
+    jobmanager_url: http://localhost:8081
+    flink_master: localhost:8081
+    rest_url: http://localhost:8081
+    pipeline_options:
+      parallelism: 4
+      checkpointing_interval: 10000
+      state_backend: "memory"
+      tmp_dir: "/tmp/beam-flink-tmp"
+      savepoint_path: "/tmp/beam-flink-savepoints"
+      streaming: false
+      
+  # Spark runner configuration
+  spark:
+    enabled: true
+    spark_master: local[*]
+    pipeline_options:
+      spark_job_name: beam-mcp-spark-job
+      spark_executor_instances: 2
+      spark_executor_cores: 2
+      spark_executor_memory: 1g
+      temp_location: /tmp/beam-spark-temp
+      
+  # Dataflow runner configuration
+  dataflow:
+    enabled: true
+    pipeline_options:
+      project: your-gcp-project-id  # Must be set
+      region: us-central1
+      temp_location: gs://your-bucket/temp
+      staging_location: gs://your-bucket/staging
+```
+
+### Starting the Server
+
+To start the server with a specific configuration:
+
+```bash
+python main.py --config config/flink_config.yaml --port 8082 --debug
+```
+
+### Environment Setup
+
+#### Local Development (Direct Runner)
+
+No additional setup required beyond the installation instructions.
+
+#### Apache Flink
+
+1. Download Apache Flink from https://flink.apache.org/downloads/
+2. Start a local Flink cluster:
+   ```bash
+   ./bin/start-cluster.sh
+   ```
+3. Verify the Flink dashboard is accessible at http://localhost:8081
+
+#### Apache Spark
+
+1. Download Apache Spark from https://spark.apache.org/downloads/
+2. Set the `SPARK_HOME` environment variable:
+   ```bash
+   export SPARK_HOME=/path/to/spark
+   ```
+3. For local development, no additional setup is needed as `local[*]` will be used
+
+#### Google Cloud Dataflow
+
+1. Install Google Cloud SDK: https://cloud.google.com/sdk/docs/install
+2. Authenticate with GCP:
+   ```bash
+   gcloud auth login
+   gcloud config set project your-project-id
+   ```
+3. Create a GCS bucket for temporary files
+4. Update the configuration with your GCP project ID and bucket
+
+### Verifying All Runners
+
+The repository includes a helpful verification script that will:
+1. Check for required installations (Flink and Spark)
+2. Start a local Flink cluster if needed
+3. Launch the MCP server
+4. Run tests for all configured runners (Direct, Flink, and Spark)
+
+To run the verification:
+
+```bash
+# Make sure the script is executable
+chmod +x scripts/verify_runners.sh
+
+# Run the verification
+./scripts/verify_runners.sh
+```
+
+The script will provide feedback on which runners are working correctly and help diagnose any issues.
+
+### End-to-End Testing
+
+For comprehensive testing of all server APIs and LLM integration capabilities, use the end-to-end testing script:
+
+```bash
+# Make sure the script is executable
+chmod +x scripts/run_e2e_tests.sh
+
+# Run the end-to-end tests
+./scripts/run_e2e_tests.sh
+```
+
+This script:
+1. Checks for Flink and Spark installations
+2. Starts a local Flink cluster if needed
+3. Starts the MCP server
+4. Tests all API endpoints
+5. Validates response formats for LLM tool integration
+6. Submits jobs to all available runners
+7. Verifies job status, metrics, and cancellation
+8. Provides a detailed test summary
+
+You can customize the test run:
+
+```bash
+# Use a custom configuration file
+./scripts/run_e2e_tests.sh --config path/to/config.yaml
+
+# Run on a different port
+./scripts/run_e2e_tests.sh --port 8083
+
+# Skip Flink cluster check/startup (if you're only testing Direct runner)
+./scripts/run_e2e_tests.sh --skip-flink-check
+```
+
+These tests ensure that the MCP server is functioning correctly and can be properly integrated with LLM tools.
+
+### Running Examples
+
+The repository includes example pipelines for testing with different runners:
+
+#### Direct Runner
+
+```bash
+python examples/run_wordcount_direct.py --output /tmp/direct_wordcount
+```
+
+#### Apache Flink
+
+```bash
+python examples/run_wordcount_flink.py --flink_master http://localhost:8081 --output /tmp/flink_wordcount
+```
+
+#### Apache Spark
+
+```bash
+python examples/run_wordcount_spark.py --spark_master local[*] --output /tmp/spark_wordcount
+```
+
+#### Google Cloud Dataflow
+
+```bash
+python examples/run_wordcount_dataflow.py \
+  --project your-gcp-project-id \
+  --region us-central1 \
+  --staging_location gs://your-bucket/staging \
+  --temp_location gs://your-bucket/temp \
+  --output gs://your-bucket/output/wordcount
+```
+
+### Submitting Jobs Through the MCP Server
+
+You can also submit jobs through the MCP server API:
+
+```bash
+curl -X POST http://localhost:8082/api/v1/jobs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "job_name": "wordcount",
+    "runner_type": "flink",
+    "job_type": "BATCH",
+    "code_path": "examples/pipelines/wordcount.py",
+    "pipeline_options": {
+      "parallelism": 4
+    }
+  }'
+```
+
+Or use the client example:
+
+```python
+from examples.client import BeamMCPClient
+import asyncio
+
+async def run_job():
+    client = BeamMCPClient(base_url="http://localhost:8082")
+    job = await client.create_job({
+        "job_name": "wordcount",
+        "runner_type": "flink",
+        "job_type": "BATCH",
+        "code_path": "examples/pipelines/wordcount.py",
+        "pipeline_options": {
+            "parallelism": 4
+        }
+    })
+    print(f"Job created: {job['job_id']}")
+
+asyncio.run(run_job())
+```
+
+## Troubleshooting
+
+### Flink Jobs
+
+- Ensure the Flink cluster is running and accessible
+- Check the Flink dashboard for job status
+- Verify the jobmanager URL is correct in your configuration
+
+### Spark Jobs
+
+- Verify the Spark master URL
+- Check Spark logs at `$SPARK_HOME/logs`
+- For cluster deployments, ensure proper network connectivity
+
+### Dataflow Jobs
+
+- Ensure your GCP credentials are properly set up
+- Verify the project ID and region
+- Check the Google Cloud Console Dataflow page for job status
+
+### Common Issues
+
+- **Missing Project ID**: When using Dataflow, ensure the project ID is set in your configuration
+- **Path Issues**: Make sure temp_location and other paths are accessible by the runners
+- **Network Connectivity**: For remote clusters, verify connectivity between the MCP server and the cluster
+- **Job Submission Failures**: Check the server logs for detailed error messages 

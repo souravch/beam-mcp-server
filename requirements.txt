@@ -6,18 +6,24 @@ pydantic-settings>=2.0.0,<3.0.0
 python-dotenv>=0.19.0,<1.0.0
 
 # Apache Beam and runners
-apache-beam[gcp,spark]>=2.46.0,<3.0.0
+apache-beam[gcp,spark,flink]>=2.46.0,<3.0.0
 pyspark>=3.4.0,<4.0.0
 py4j>=0.10.9.7
+
+# Flink dependencies
+apache-flink>=1.17.0  # Optional, used for Flink dashboard API access
 
 # HTTP clients
 aiohttp>=3.8.0,<4.0.0
 requests>=2.26.0,<3.0.0
+httpx>=0.25.0  # Added for custom MCP client
+
+# MCP dependencies
+mcp-server>=1.0.0
 
 # Testing
 pytest>=7.0.0,<8.0.0
 pytest-asyncio>=0.16.0,<1.0.0
-httpx>=0.24.0,<1.0.0
 
 # Configuration
 PyYAML>=6.0.0,<7.0.0
@@ -44,4 +50,12 @@ gitpython>=3.1.40
 opentelemetry-api>=1.21.0
 opentelemetry-sdk>=1.21.0
 opentelemetry-exporter-otlp>=1.21.0
-prometheus-client>=0.19.0 
+prometheus-client>=0.19.0
+
+# Google Cloud 
+google-cloud-dataflow>=0.1.5
+google-cloud-storage>=2.7.0
+
+# Optional: Dataframe support
+pandas>=1.5.0,<2.0.0
+pyarrow>=10.0.0 

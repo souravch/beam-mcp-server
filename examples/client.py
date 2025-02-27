@@ -13,7 +13,7 @@ from typing import Dict, Any, Optional, List
 from enum import Enum
 import time
 import asyncio
-from mcp import MCPClient, Context
+from src.server.mcp_client import MCPClient, Context
 from src.server.models.common import MCPRequest, MCPResponse
 
 class RunnerType(str, Enum):
@@ -133,33 +133,46 @@ class BeamMCPClient:
         """Get the server's tool manifest."""
         return await self.client.get_manifest()
     
+    async def get_health(self) -> Dict:
+        """Get the server's health status."""
+        return await self.client.get_health()
+    
     async def get_context(self) -> Context:
         """Get the current MCP context."""
         return await self.client.get_context()
     
     async def list_runners(self) -> List[Dict]:
-        """List available Dataflow runners."""
+        """List available runners."""
         response = await self.client.invoke_tool(
             tool_name="list_runners",
             parameters={}
         )
-        return response.data
+        # Handle different response formats
+        if isinstance(response, dict) and "data" in response:
+            return response["data"]
+        return response
     
     async def create_job(self, job_params: Dict) -> Dict:
-        """Create a new Dataflow job."""
+        """Create a new job."""
         response = await self.client.invoke_tool(
             tool_name="create_job",
             parameters=job_params
         )
-        return response.data
+        # Handle different response formats
+        if isinstance(response, dict) and "data" in response:
+            return response["data"]
+        return response
     
     async def list_jobs(self) -> List[Dict]:
-        """List all Dataflow jobs."""
+        """List all jobs."""
         response = await self.client.invoke_tool(
             tool_name="list_jobs",
             parameters={}
         )
-        return response.data
+        # Handle different response formats
+        if isinstance(response, dict) and "data" in response:
+            return response["data"]
+        return response
     
     async def get_job(self, job_id: str) -> Dict:
         """Get details of a specific job."""
@@ -167,7 +180,10 @@ class BeamMCPClient:
             tool_name="get_job",
             parameters={"job_id": job_id}
         )
-        return response.data
+        # Handle different response formats
+        if isinstance(response, dict) and "data" in response:
+            return response["data"]
+        return response
     
     async def cancel_job(self, job_id: str) -> Dict:
         """Cancel a running job."""
@@ -175,7 +191,10 @@ class BeamMCPClient:
             tool_name="cancel_job",
             parameters={"job_id": job_id}
         )
-        return response.data
+        # Handle different response formats
+        if isinstance(response, dict) and "data" in response:
+            return response["data"]
+        return response
     
     async def drain_job(self, job_id: str) -> Dict:
         """Drain a running job."""
@@ -183,7 +202,10 @@ class BeamMCPClient:
             tool_name="drain_job",
             parameters={"job_id": job_id}
         )
-        return response.data
+        # Handle different response formats
+        if isinstance(response, dict) and "data" in response:
+            return response["data"]
+        return response
     
     async def create_savepoint(self, job_id: str, savepoint_params: Dict) -> Dict:
         """Create a savepoint for a job."""
@@ -192,7 +214,10 @@ class BeamMCPClient:
             tool_name="create_savepoint",
             parameters=params
         )
-        return response.data
+        # Handle different response formats
+        if isinstance(response, dict) and "data" in response:
+            return response["data"]
+        return response
     
     async def list_savepoints(self, job_id: str) -> List[Dict]:
         """List savepoints for a job."""
@@ -200,7 +225,10 @@ class BeamMCPClient:
             tool_name="list_savepoints",
             parameters={"job_id": job_id}
         )
-        return response.data
+        # Handle different response formats
+        if isinstance(response, dict) and "data" in response:
+            return response["data"]
+        return response
     
     async def get_savepoint(self, job_id: str, savepoint_id: str) -> Dict:
         """Get details of a specific savepoint."""
@@ -211,7 +239,10 @@ class BeamMCPClient:
                 "savepoint_id": savepoint_id
             }
         )
-        return response.data
+        # Handle different response formats
+        if isinstance(response, dict) and "data" in response:
+            return response["data"]
+        return response
     
     async def get_metrics(self, job_id: str) -> Dict:
         """Get metrics for a job."""
@@ -219,7 +250,15 @@ class BeamMCPClient:
             tool_name="get_metrics",
             parameters={"job_id": job_id}
         )
-        return response.data
+        # Handle different response formats
+        if isinstance(response, dict) and "data" in response:
+            return response["data"]
+        return response
+    
+    # Alias for get_metrics to match the method name in e2e_test.py
+    async def get_job_metrics(self, job_id: str) -> Dict:
+        """Alias for get_metrics to match the method name in e2e_test.py."""
+        return await self.get_metrics(job_id)
 
 async def main():
     """Example usage of the BeamMCPClient."""
@@ -271,7 +310,7 @@ async def main():
         print("Created Savepoint:", savepoint)
         
         # Get job metrics
-        metrics = await client.get_metrics(job["job_id"])
+        metrics = await client.get_job_metrics(job["job_id"])
         print("Job Metrics:", metrics)
         
         # Cancel the job

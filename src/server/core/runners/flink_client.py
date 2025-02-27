@@ -34,23 +34,39 @@ class FlinkClient(BaseRunnerClient):
     
     def __init__(self, config: Dict[str, Any]):
         """
-        Initialize the Flink runner client.
+        Initialize the Flink client
         
         Args:
-            config (Dict[str, Any]): Configuration for the Flink runner
+            config (Dict[str, Any]): Client configuration
         """
         super().__init__(config)
-        self._validate_config()
+        self.validate_config()
         
-        # Initialize Flink REST client
+        # Set up Flink connection info
         self.jobmanager_url = config.get('jobmanager_url', 'http://localhost:8081')
-        self.jobs = {}  # In-memory job storage
+        self.flink_master = config.get('flink_master', 'localhost:8081')
+        self.rest_url = config.get('rest_url', self.jobmanager_url)
+        self.jar_path = config.get('jar_path')
+        
+        # Set up in-memory storage for jobs
+        self.jobs = {}
+        self.savepoints = {}
         self.session = None
+        
+        # No connection checking in __init__ - will be done lazily when needed
         
     async def _ensure_session(self):
         """Ensure aiohttp session exists."""
-        if self.session is None:
-            self.session = aiohttp.ClientSession()
+        try:
+            if self.session is None:
+                logger.debug("Creating new aiohttp ClientSession")
+                self.session = aiohttp.ClientSession()
+                logger.debug("Successfully created aiohttp ClientSession")
+            else:
+                logger.debug("Using existing aiohttp ClientSession")
+        except Exception as e:
+            logger.error(f"Error creating aiohttp ClientSession: {str(e)}")
+            raise Exception(f"Failed to create HTTP session: {str(e)}")
             
     async def _close_session(self):
         """Close aiohttp session."""
@@ -72,13 +88,13 @@ class FlinkClient(BaseRunnerClient):
                 'job_name': params.job_name,
                 'streaming': params.job_type == JobType.STREAMING,
                 # Add Flink-specific options from config
-                'parallelism': self.config['options'].get('parallelism', 1),
-                'checkpointing_interval': self.config['options'].get('checkpointing_interval'),
-                'state_backend': self.config['options'].get('state_backend'),
-                'state_backend_path': self.config['options'].get('state_backend_path'),
-                'restart_strategy': self.config['options'].get('restart_strategy'),
-                'restart_attempts': self.config['options'].get('restart_attempts'),
-                'restart_delay': self.config['options'].get('restart_delay')
+                'parallelism': self.config['pipeline_options'].get('parallelism', 4),
+                'checkpointing_interval': self.config['pipeline_options'].get('checkpointing_interval'),
+                'state_backend': self.config['pipeline_options'].get('state_backend'),
+                'state_backend_path': self.config['pipeline_options'].get('state_backend_path'),
+                'restart_strategy': self.config['pipeline_options'].get('restart_strategy'),
+                'restart_attempts': self.config['pipeline_options'].get('restart_attempts'),
+                'restart_delay': self.config['pipeline_options'].get('restart_delay')
             })
             
             logger.info(f"Submitting job to Flink cluster at {self.jobmanager_url}")
@@ -426,39 +442,58 @@ class FlinkClient(BaseRunnerClient):
             Runner: Runner information
         """
         try:
+            logger.info(f"Getting runner info for Flink client at {self.jobmanager_url}")
+            
+            # Ensure we have a session
             await self._ensure_session()
-            # Get Flink cluster information
+            
+            # Simple approach - just get cluster overview in one go
+            logger.debug(f"Requesting Flink cluster info from {self.jobmanager_url}")
+            
+            # Get cluster overview
             async with self.session.get(f"{self.jobmanager_url}/overview") as response:
-                cluster_info = await response.json()
+                if response.status != 200:
+                    error_text = await response.text()
+                    logger.error(f"Error getting Flink cluster overview: HTTP {response.status}, {error_text}")
+                    raise Exception(f"Failed to get Flink cluster overview: HTTP {response.status}")
                 
-                # Get task manager info
-                async with self.session.get(f"{self.jobmanager_url}/taskmanagers") as tm_response:
-                    tm_info = await tm_response.json()
-                    
-                    return Runner(
-                        mcp_resource_id="flink-runner",
-                        name="Apache Flink",
-                        runner_type=RunnerType.FLINK,
-                        status=RunnerStatus.AVAILABLE,
-                        description="Apache Flink runner for stream processing",
-                        capabilities=[
-                            RunnerCapability.BATCH,
-                            RunnerCapability.STREAMING,
-                            RunnerCapability.SAVEPOINTS,
-                            RunnerCapability.CHECKPOINTING,
-                            RunnerCapability.METRICS,
-                            RunnerCapability.LOGGING
-                        ],
-                        config=self.config,
-                        version=cluster_info.get('flink-version', 'unknown'),
-                        mcp_provider="apache",
-                        mcp_min_workers=1,
-                        mcp_max_workers=len(tm_info.get('taskmanagers', [])),
-                        mcp_auto_scaling=False  # Flink doesn't support auto-scaling
-                    )
-                    
+                cluster_info = await response.json()
+                logger.info(f"Connected to Flink cluster version {cluster_info.get('flink-version', 'unknown')}")
+            
+            # Get taskmanager info to determine number of workers
+            taskmanager_count = cluster_info.get('taskmanagers', 1)
+            
+            # Build and return the Runner object
+            logger.info(f"Creating Runner object for Flink with version {cluster_info.get('flink-version', 'unknown')}")
+            return Runner(
+                mcp_resource_id="flink",  # Use same ID as in config
+                name="Apache Flink",
+                runner_type=RunnerType.FLINK,
+                status=RunnerStatus.AVAILABLE,
+                description="Apache Flink runner for stream processing",
+                capabilities=[
+                    RunnerCapability.BATCH,
+                    RunnerCapability.STREAMING,
+                    RunnerCapability.SAVEPOINTS,
+                    RunnerCapability.CHECKPOINTING,
+                    RunnerCapability.METRICS,
+                    RunnerCapability.LOGGING
+                ],
+                config=self.config,
+                version=cluster_info.get('flink-version', 'unknown'),
+                mcp_provider="apache",
+                mcp_min_workers=1,
+                mcp_max_workers=taskmanager_count,
+                mcp_auto_scaling=False  # Flink doesn't support auto-scaling
+            )
+                
         except Exception as e:
             logger.error(f"Error getting Flink runner info: {str(e)}")
+            logger.error(f"Exception type: {type(e).__name__}")
+            # Log traceback for better debugging
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            # Re-raise the exception to be caught by the client manager
             raise
             
     def _convert_flink_state(self, state: str) -> JobStatus:
@@ -478,25 +513,61 @@ class FlinkClient(BaseRunnerClient):
         }
         return state_map.get(state, JobStatus.FAILED)
         
-    def _validate_config(self) -> None:
-        """Validate Flink runner configuration."""
-        super()._validate_config()
+    def validate_config(self) -> None:
+        """
+        Validate the client configuration.
         
+        Raises:
+            ValueError: If the configuration is invalid
+        """
+        # Ensure jobmanager_url is valid
         if 'jobmanager_url' not in self.config:
-            raise ValueError("Flink JobManager URL is required in configuration")
-            
-        # Validate options
-        if 'options' not in self.config:
-            self.config['options'] = {}
-            
-        options = self.config['options']
+            self.config['jobmanager_url'] = 'http://localhost:8081'
+        
+        # Validate pipeline options
+        if 'pipeline_options' not in self.config:
+            self.config['pipeline_options'] = {}
+        
+        # Apply defaults for pipeline options
+        options = self.config['pipeline_options']
         if 'parallelism' not in options:
-            options['parallelism'] = 1
+            options['parallelism'] = 4
+        
         if 'checkpointing_interval' not in options:
-            options['checkpointing_interval'] = 10000  # 10 seconds
+            options['checkpointing_interval'] = 10000  # ms
+        
+        if 'tmp_dir' not in options:
+            options['tmp_dir'] = '/tmp/beam-flink'
+        
         if 'state_backend' not in options:
-            options['state_backend'] = 'rocksdb' 
-
+            options['state_backend'] = 'rocksdb'
+        
+    async def _check_flink_connection(self) -> bool:
+        """
+        Check if the Flink cluster is reachable.
+        
+        Returns:
+            bool: True if the cluster is reachable, False otherwise
+        """
+        logger.info(f"Checking connection to Flink cluster at {self.jobmanager_url}")
+        
+        try:
+            await self._ensure_session()
+            
+            async with self.session.get(f"{self.jobmanager_url}/overview") as response:
+                if response.status != 200:
+                    logger.warning(f"Flink cluster responded with HTTP {response.status}")
+                    return False
+                    
+                overview = await response.json()
+                version = overview.get('flink-version', 'unknown')
+                logger.info(f"Connected to Flink cluster version {version}")
+                return True
+        
+        except Exception as e:
+            logger.warning(f"Failed to connect to Flink cluster: {str(e)}")
+            return False
+        
     async def get_savepoint(self, job_id: str, savepoint_id: str) -> Optional[Savepoint]:
         """Get savepoint details.
         

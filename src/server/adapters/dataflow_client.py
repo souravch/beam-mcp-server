@@ -30,15 +30,15 @@ logger = logging.getLogger(__name__)
 
 # Mapping of Dataflow job states to our JobState enum
 DATAFLOW_JOB_STATE_MAP = {
-    DataflowJob.State.JOB_STATE_PENDING: JobState.PENDING,
-    DataflowJob.State.JOB_STATE_RUNNING: JobState.RUNNING,
-    DataflowJob.State.JOB_STATE_DONE: JobState.SUCCEEDED,
-    DataflowJob.State.JOB_STATE_FAILED: JobState.FAILED,
-    DataflowJob.State.JOB_STATE_CANCELLED: JobState.CANCELLED,
-    DataflowJob.State.JOB_STATE_UPDATED: JobState.RUNNING,
-    DataflowJob.State.JOB_STATE_DRAINING: JobState.DRAINING,
-    DataflowJob.State.JOB_STATE_DRAINED: JobState.SUCCEEDED,
-    DataflowJob.State.JOB_STATE_UNKNOWN: JobState.UNKNOWN,
+    "JOB_STATE_PENDING": JobState.PENDING,
+    "JOB_STATE_RUNNING": JobState.RUNNING,
+    "JOB_STATE_DONE": JobState.SUCCEEDED,
+    "JOB_STATE_FAILED": JobState.FAILED,
+    "JOB_STATE_CANCELLED": JobState.CANCELLED,
+    "JOB_STATE_UPDATED": JobState.RUNNING,
+    "JOB_STATE_DRAINING": JobState.DRAINING,
+    "JOB_STATE_DRAINED": JobState.SUCCEEDED,
+    "JOB_STATE_UNKNOWN": JobState.UNKNOWN,
 }
 
 class DataflowClient:
@@ -545,11 +545,18 @@ class DataflowClient:
         """
         # Map job type
         job_type = JobType.BATCH
-        if job.type == DataflowJob.Type.JOB_TYPE_STREAMING:
-            job_type = JobType.STREAMING
+        if hasattr(job, 'type') and job.type:
+            # Use the job type from the job if available
+            if job.type == "JOB_TYPE_STREAMING":
+                job_type = JobType.STREAMING
+        elif params and params.job_type:
+            # Fall back to the job type from the parameters
+            job_type = params.job_type
         
         # Map job state
-        current_state = DATAFLOW_JOB_STATE_MAP.get(job.current_state, JobState.UNKNOWN)
+        current_state = JobState.UNKNOWN
+        if hasattr(job, 'current_state') and job.current_state:
+            current_state = DATAFLOW_JOB_STATE_MAP.get(job.current_state, JobState.UNKNOWN)
         
         # Extract create and update times
         create_time = job.create_time.isoformat() + "Z" if hasattr(job, 'create_time') else datetime.now().isoformat() + "Z"
