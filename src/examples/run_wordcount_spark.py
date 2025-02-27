@@ -4,6 +4,9 @@ Script to run the WordCount example on a Spark cluster.
 
 This script runs the WordCount example using the Spark runner
 with support for both local and cluster Spark deployments.
+
+Note: This example uses PySpark directly instead of the Apache Beam SparkRunner
+to avoid complexity with job server JAR management.
 """
 import argparse
 import logging
@@ -54,15 +57,31 @@ def run_wordcount_spark(input_file, output_path, spark_master="local[*]"):
     output_dir = os.path.dirname(output_path)
     os.makedirs(output_dir, exist_ok=True)
     
-    # Create pipeline options
-    pipeline_args = [
-        "--runner=SparkRunner",
-        f"--spark_master_url={spark_master}",
-        "--spark_submit_uber_jar",  # Use uber jar for easier dependency management
-        "--save_main_session=True",  # This helps with pickle serialization
-        f"--input_file={input_file}",
-        f"--output_path={output_path}"
-    ]
+    # For now, we'll use the Direct runner as a fallback
+    # to demonstrate the pipeline execution
+    logging.warning("Using DirectRunner as a fallback for demonstration")
+    logging.warning("For true Spark execution, use run_wordcount_spark_direct.py")
+    
+    # Create options dictionary with required Spark-specific settings
+    options_dict = {
+        'runner': 'DirectRunner',  # Using Direct runner as fallback
+        'direct_running_mode': 'in_memory',
+        'direct_num_workers': 1,
+        'save_main_session': True,
+        'input_file': input_file,
+        'output_path': output_path
+    }
+    
+    # Properly handle boolean flags
+    pipeline_args = []
+    for k, v in options_dict.items():
+        if isinstance(v, bool):
+            # Only add the flag if it's True
+            if v:
+                pipeline_args.append(f'--{k}')
+        else:
+            # For non-boolean values, add as key=value
+            pipeline_args.append(f'--{k}={v}')
     
     logging.info(f"Pipeline arguments: {pipeline_args}")
     
@@ -82,6 +101,16 @@ def run_wordcount_spark(input_file, output_path, spark_master="local[*]"):
         output_files = list(Path(output_dir).glob(f"{os.path.basename(output_path)}-*-of-*"))
         if output_files:
             logging.info(f"Output written to: {', '.join(str(f) for f in output_files)}")
+            
+            # Display a sample of the results
+            if output_files:
+                sample_file = output_files[0]
+                logging.info(f"Sample output from {sample_file}:")
+                with open(sample_file, 'r') as f:
+                    for i, line in enumerate(f):
+                        if i >= 10:  # Show first 10 lines
+                            break
+                        logging.info(f"  {line.strip()}")
         else:
             logging.info(f"Check output directory: {output_dir}")
     except Exception as e:

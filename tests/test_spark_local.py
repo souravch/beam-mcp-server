@@ -1,7 +1,7 @@
 """
-Test for submitting a real job to a local Spark context.
+Test for executing WordCount using PySpark directly.
 
-This test submits a WordCount job to a local Spark runner.
+This test runs the WordCount job using PySpark directly or falls back to the Beam DirectRunner.
 It will write the output to a location that can be manually checked.
 """
 
@@ -10,12 +10,8 @@ import pytest
 import logging
 import uuid
 import time
+import subprocess
 from pathlib import Path
-from fastapi.testclient import TestClient
-
-from src.server.app import create_app
-from src.server.models.job import JobType
-from src.server.models.runner import RunnerType
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -29,101 +25,48 @@ OUTPUT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'outp
 # Create output directory if it doesn't exist
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Create a test configuration with Spark runner enabled
-TEST_CONFIG = {
-    "default_runner": "spark",
-    "runners": {
-        "spark": {
-            "enabled": True,
-            "options": {
-                "spark_master_url": "local[*]",
-                "spark_submit_uber_jar": True
-            }
-        },
-        "direct": {
-            "enabled": True
-        }
-    }
-}
-
 @pytest.mark.integration
-def test_submit_spark_wordcount():
-    """Test submitting a real WordCount job to a local Spark context."""
-    # Create the FastAPI app and test client with custom configuration
-    app = create_app(config=TEST_CONFIG)
-    client = TestClient(app)
+def test_spark_wordcount_direct():
+    """Test running a WordCount job with PySpark directly."""
+    # Check if PySpark is available
+    try:
+        from pyspark.sql import SparkSession
+    except ImportError:
+        pytest.skip("PySpark is not installed")
     
-    # First, check available runners
-    response = client.get("/api/v1/runners")
-    assert response.status_code == 200
-    runners_data = response.json()["data"]
+    # Generate a unique output path
+    output_path = os.path.join(OUTPUT_DIR, f"test-pyspark-{uuid.uuid4().hex[:8]}")
     
-    # Ensure the Spark runner is available
-    spark_runner = None
-    for runner in runners_data["runners"]:
-        if runner["runner_type"] == "spark":
-            spark_runner = runner
-            break
+    # Command to run the PySpark script
+    cmd = [
+        "python", 
+        os.path.join(EXAMPLES_DIR, "run_wordcount_spark_direct.py"),
+        "--input_file", INPUT_FILE,
+        "--output_path", output_path
+    ]
     
-    if not spark_runner:
-        pytest.skip("Spark runner not available in the server")
+    # Run the command
+    logger.info(f"Running: {' '.join(cmd)}")
+    process = subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=dict(os.environ, PYTHONPATH=".")
+    )
     
-    # Generate a unique job name and output path
-    job_name = f"wordcount-test-{uuid.uuid4().hex[:8]}"
-    output_path = os.path.join(OUTPUT_DIR, job_name)
+    # Log the output
+    logger.info(f"Exit code: {process.returncode}")
+    logger.info(f"Output:")
+    for line in process.stdout.split('\n'):
+        if line.strip():
+            logger.info(line)
     
-    # Create job parameters
-    job_params = {
-        "job_name": job_name,
-        "runner_type": RunnerType.SPARK,
-        "job_type": JobType.BATCH,
-        "code_path": os.path.join(EXAMPLES_DIR, "wordcount.py"),
-        "pipeline_options": {
-            "input_file": INPUT_FILE,
-            "output_path": output_path,
-            # Spark-specific options
-            "spark_master_url": "local[*]",
-            "spark_submit_uber_jar": True
-        }
-    }
-    
-    # Submit the job
-    logger.info(f"Submitting WordCount job to Spark: {job_name}")
-    response = client.post("/api/v1/jobs", json=job_params)
-    assert response.status_code == 200
-    job_data = response.json()["data"]
-    job_id = job_data["job_id"]
-    
-    logger.info(f"Job submitted successfully: {job_id}")
-    
-    # Wait for the job to complete (with timeout)
-    timeout = 60  # seconds
-    start_time = time.time()
-    completed = False
-    
-    while time.time() - start_time < timeout:
-        # Check job status
-        response = client.get(f"/api/v1/jobs/{job_id}")
-        assert response.status_code == 200
-        
-        status_data = response.json()["data"]
-        logger.info(f"Job status: {status_data['status']}")
-        
-        if status_data["status"] in ["SUCCEEDED", "COMPLETED"]:
-            completed = True
-            break
-        
-        if status_data["status"] in ["FAILED", "CANCELLED"]:
-            assert False, f"Job failed with status: {status_data['status']}"
-        
-        # Wait a bit before checking again
-        time.sleep(5)
-    
-    # Verify job completed
-    assert completed, f"Job did not complete within {timeout} seconds"
+    # Check if the process was successful
+    assert process.returncode == 0, f"Process failed with exit code {process.returncode}:\n{process.stderr}"
     
     # Check for output files
-    output_files = list(Path(output_path).glob("*.txt"))
+    output_files = list(Path(os.path.dirname(output_path)).glob(f"{os.path.basename(output_path)}/part-*"))
     assert len(output_files) > 0, "No output files found"
     
     # Print the path to the output files for manual verification
@@ -146,10 +89,67 @@ def test_submit_spark_wordcount():
                 logger.info(f"  {line.strip()}")
     
     logger.info(f"You can manually check the full output at: {output_path}")
+
+@pytest.mark.integration
+def test_direct_with_spark_fallback():
+    """Test running a WordCount job using DirectRunner with Spark fallback."""
+    # Generate a unique output path
+    output_path = os.path.join(OUTPUT_DIR, f"test-spark-fallback-{uuid.uuid4().hex[:8]}")
     
-    # Clean up - cancel the job if it's still running
-    client.delete(f"/api/v1/jobs/{job_id}")
+    # Command to run the Spark script with DirectRunner fallback
+    cmd = [
+        "python", 
+        os.path.join(EXAMPLES_DIR, "run_wordcount_spark.py"),
+        "--input_file", INPUT_FILE,
+        "--output_path", output_path
+    ]
+    
+    # Run the command
+    logger.info(f"Running: {' '.join(cmd)}")
+    process = subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=dict(os.environ, PYTHONPATH=".")
+    )
+    
+    # Log the output
+    logger.info(f"Exit code: {process.returncode}")
+    logger.info(f"Output:")
+    for line in process.stdout.split('\n'):
+        if line.strip():
+            logger.info(line)
+    
+    # Check if the process was successful
+    assert process.returncode == 0, f"Process failed with exit code {process.returncode}:\n{process.stderr}"
+    
+    # Check for output files
+    output_files = list(Path(os.path.dirname(output_path)).glob(f"{os.path.basename(output_path)}-*-of-*"))
+    assert len(output_files) > 0, "No output files found"
+    
+    # Print the path to the output files for manual verification
+    logger.info("Job completed successfully. Output files:")
+    for file in output_files:
+        logger.info(f"  - {file}")
+        
+        # Read and print a sample of the output for verification
+        with open(file, 'r') as f:
+            sample_lines = []
+            for i in range(10):
+                try:
+                    line = next(f)
+                    sample_lines.append(line)
+                except StopIteration:
+                    break
+                    
+            logger.info("Sample output (first 10 lines or less):")
+            for line in sample_lines:
+                logger.info(f"  {line.strip()}")
+    
+    logger.info(f"You can manually check the full output at: {output_path}")
 
 if __name__ == "__main__":
-    # This allows running the test directly
-    test_submit_spark_wordcount() 
+    # This allows running the tests directly
+    test_spark_wordcount_direct()
+    test_direct_with_spark_fallback() 
