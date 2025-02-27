@@ -8,6 +8,8 @@
 - [Integration Guide](#integration-guide)
 - [Development Roadmap](#development-roadmap)
 - [Best Practices](#best-practices)
+- [Examples and Demonstrations](#examples-and-demonstrations)
+  - [WordCount Multi-Runner Implementation](#wordcount-multi-runner-implementation)
 
 ## Overview
 
@@ -83,6 +85,8 @@ graph TD
 - Aggregation and storage
 
 ## Runner Interoperability
+
+The MCP Server provides cross-runner compatibility through standardized abstractions. This allows pipelines to be developed once and deployed across multiple execution engines. For a practical demonstration of this interoperability, see the [WordCount Multi-Runner Implementation](#wordcount-multi-runner-implementation) example.
 
 ### Sequence Diagrams
 
@@ -757,6 +761,35 @@ curl http://localhost:8080/api/v1/health/llm
 3. Alert configuration
 4. Performance monitoring
 
+### Pipeline Parameter Handling
+
+When developing pipelines for cross-runner compatibility, follow these parameter handling practices:
+
+1. **Layered Parameter Extraction**
+   - Implement multi-tiered parameter extraction as demonstrated in the WordCount example
+   - Check direct object attributes first, then fall back to dictionaries and command-line parsing
+   - This approach ensures parameters can be provided through various methods
+
+2. **Custom PipelineOptions Classes**
+   - Define custom `PipelineOptions` subclasses for your pipelines
+   - Use the `_add_argparse_args` method to register custom arguments
+   - This provides proper type checking and documentation
+
+3. **Input Validation**
+   - Always validate input/output paths before pipeline execution
+   - Check for file existence and create output directories as needed
+   - Provide clear error messages when validation fails
+
+4. **Runner Configuration**
+   - Set reasonable defaults for runner-specific options
+   - Document version compatibility requirements
+   - Provide flexible configuration options for execution environments
+
+5. **Error Handling and Logging**
+   - Implement comprehensive error handling and logging
+   - Log pipeline parameters and execution stages
+   - Capture and report runner-specific errors appropriately
+
 ## Current Implementation Status
 
 ### Completed Features
@@ -1000,4 +1033,101 @@ class BeamClientManager:
         if not self.config['runners'][runner_type_str].get('enabled', False):
             raise ValueError(f"Runner type not enabled: {runner_type_str}")
         return self.clients.get(runner_type_str, self)
-``` 
+```
+
+## Examples and Demonstrations
+
+### WordCount Multi-Runner Implementation
+
+The Apache Beam MCP Server includes example implementations of the classic WordCount pipeline adapted to run on multiple runners. This provides a practical demonstration of runner interoperability while maintaining consistent logic and parameter handling.
+
+#### Example Components
+
+```
+src/examples/
+├── wordcount.py                 # Core WordCount pipeline logic (runner-agnostic)
+├── run_wordcount_direct.py      # Direct runner implementation
+├── run_wordcount_flink.py       # Flink runner implementation
+├── run_wordcount_spark.py       # Spark runner implementation
+├── sample_text.txt              # Sample input data
+```
+
+#### Parameter Handling Strategy
+
+The WordCount examples implement a robust multi-tiered parameter extraction approach:
+
+1. Direct attribute access on `pipeline_options` object
+2. Lookup in options dictionary via `get_all_options()`
+3. Lookup in custom `_beam_options` container
+4. Command-line argument parsing as a fallback
+5. Runner-specific custom `PipelineOptions` classes
+
+This approach ensures parameters can be provided through various methods, making the implementation flexible across different runners and interfaces.
+
+#### Runner-Specific Implementations
+
+##### Direct Runner
+
+The Direct runner implementation (`run_wordcount_direct.py`) demonstrates:
+- Local execution without external dependencies
+- In-memory processing for rapid testing
+- Custom `WordCountOptions` class for clean parameter handling
+- Proper error handling and logging
+
+##### Flink Runner
+
+The Flink runner implementation (`run_wordcount_flink.py`) showcases:
+- Integration with Apache Flink for distributed processing
+- Version compatibility handling (supports Flink 1.15.0+)
+- Configurable parallelism and execution settings
+- Options for running with or without an uber JAR
+
+##### Spark Runner
+
+The Spark runner implementation (`run_wordcount_spark.py`) illustrates:
+- Integration with Apache Spark for distributed processing
+- Support for both local and cluster Spark deployments
+- Custom option handling for Spark-specific parameters
+- Flexible master URL configuration
+
+#### Execution Flow
+
+The WordCount examples follow a consistent execution flow across all runners:
+
+1. Parse command-line arguments
+2. Validate input and output paths
+3. Configure runner-specific options
+4. Initialize the pipeline with appropriate options
+5. Execute the pipeline using the selected runner
+6. Monitor execution and handle completion
+7. Report output location and execution status
+
+#### Version Compatibility Matrix
+
+| Component | Minimum Version | Recommended Version | Notes |
+|-----------|-----------------|---------------------|-------|
+| Apache Beam | 2.40.0 | 2.63.0 | Core framework |
+| Apache Flink | 1.15.0 | 1.17.0 | For Flink runner |
+| Apache Spark | 3.2.0 | 3.3.0/3.4.0 | For Spark runner |
+| Python | 3.8 | 3.9+ | For all components |
+
+#### Integration with Runner Clients
+
+The WordCount examples can be executed either:
+1. Directly via command-line using the provided scripts
+2. Through the MCP Server API using the relevant runner client:
+   - `DirectClient` for local execution
+   - `FlinkClient` for Flink cluster execution
+   - `SparkClient` for Spark cluster execution
+
+This demonstrates the flexibility of the MCP Server architecture in supporting both direct and API-based pipeline execution while maintaining consistent logic and results.
+
+#### Future Enhancements
+
+The WordCount multi-runner implementation will be extended to support additional runners as they are integrated with the MCP Server:
+
+1. **Google Cloud Dataflow**: Integration with Google Cloud's managed service
+2. **Apache Samza**: Support for stream processing with Samza
+3. **Streaming Mode**: Adapting the examples for streaming data processing
+4. **Advanced I/O**: Supporting additional input/output formats beyond text files
+5. **Runtime Metrics**: Enhanced metrics collection and visualization across runners 
