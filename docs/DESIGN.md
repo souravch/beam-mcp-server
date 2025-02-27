@@ -1,6 +1,7 @@
 # Apache Beam MCP Server Design Document
 
 ## Table of Contents
+
 - [Overview](#overview)
 - [Architecture](#architecture)
 - [Runner Interoperability](#runner-interoperability)
@@ -55,30 +56,35 @@ graph TD
 ### Component Details
 
 #### Runner Abstraction Layer
+
 - Common interface for all runners
 - Pipeline portability handling
 - Runner-specific optimization hints
 - Resource management
 
 #### Runner Adapters
+
 - Runner-specific implementations
 - Native API integration
 - Performance optimizations
 - State management
 
 #### Pipeline Registry
+
 - Pipeline versioning
 - Template management
 - Code/JAR management
 - Dependency tracking
 
 #### State Manager
+
 - Checkpoint coordination
 - Savepoint management
 - State backend integration
 - Recovery handling
 
 #### Metrics Collector
+
 - Unified metrics interface
 - Runner-specific metrics
 - Custom metrics support
@@ -91,6 +97,7 @@ The MCP Server provides cross-runner compatibility through standardized abstract
 ### Sequence Diagrams
 
 #### Job Creation Flow
+
 ```mermaid
 sequenceDiagram
     participant Client
@@ -113,6 +120,7 @@ sequenceDiagram
 ```
 
 #### Job Monitoring Flow
+
 ```mermaid
 sequenceDiagram
     participant Client
@@ -135,6 +143,7 @@ sequenceDiagram
 ```
 
 #### Savepoint Creation Flow
+
 ```mermaid
 sequenceDiagram
     participant Client
@@ -159,6 +168,7 @@ sequenceDiagram
 ### MCP Protocol Integration
 
 #### 1. Context Management
+
 ```python
 class MCPContext:
     """Context information for MCP operations."""
@@ -179,6 +189,7 @@ class MCPContext:
 ```
 
 #### 2. Request/Response Models
+
 ```python
 class MCPRequestParams:
     """Parameters for an MCP request."""
@@ -198,6 +209,7 @@ class MCPResponse:
 ```
 
 #### 3. Resource Models
+
 ```python
 class Runner:
     """Runner resource model."""
@@ -213,6 +225,7 @@ class Runner:
 ```
 
 #### 4. Server Implementation
+
 ```python
 class DataflowMCPServer(FastMCP):
     """MCP Server implementation."""
@@ -240,6 +253,7 @@ class DataflowMCPServer(FastMCP):
 ```
 
 #### 5. Error Handling
+
 ```python
 async def handle_error(self, error: Exception, context: MCPContext) -> MCPResponse:
     """Handle errors and return appropriate response."""
@@ -249,7 +263,9 @@ async def handle_error(self, error: Exception, context: MCPContext) -> MCPRespon
 ```
 
 #### 6. Tool Discovery
+
 The server provides a manifest endpoint that describes available tools:
+
 ```json
 {
     "tools": [
@@ -280,6 +296,7 @@ The server provides a manifest endpoint that describes available tools:
 ### Job Management
 
 #### 1. Client Manager Architecture
+
 ```python
 class BeamClientManager:
     """Manager for Apache Beam runner clients."""
@@ -304,6 +321,7 @@ class BeamClientManager:
 - **Configuration Management**: Runner-specific settings handled per client
 
 #### 2. Job Lifecycle Management
+
 ```python
 async def create_job(self, params: JobParameters) -> JobInfo:
     """Create a new job."""
@@ -334,6 +352,7 @@ async def update_job(self, job_id: str, params: JobUpdateParameters) -> JobInfo:
 ### Runner Interoperability
 
 #### 1. Runner Abstraction
+
 ```python
 class BaseRunnerClient:
     """Base class for runner clients."""
@@ -359,6 +378,7 @@ class BaseRunnerClient:
 #### 2. Runner-Specific Implementations
 
 ##### Dataflow Runner
+
 ```python
 class DataflowClient(BaseRunnerClient):
     async def create_job(self, params: JobParameters) -> JobInfo:
@@ -386,6 +406,7 @@ class DataflowClient(BaseRunnerClient):
 - **Monitoring Integration**: Built-in metrics collection
 
 ##### Direct Runner
+
 ```python
 class DirectClient(BaseRunnerClient):
     async def create_job(self, params: JobParameters) -> JobInfo:
@@ -417,6 +438,7 @@ class DirectClient(BaseRunnerClient):
 ### State Management
 
 #### 1. Savepoint Handling
+
 ```python
 async def create_savepoint(self, job_id: str, params: SavepointParameters) -> SavepointInfo:
     """Create a savepoint for a job."""
@@ -444,6 +466,7 @@ async def create_savepoint(self, job_id: str, params: SavepointParameters) -> Sa
 - **Location Management**: Flexible storage location support
 
 #### 2. Checkpoint Coordination
+
 ```python
 class SavepointRequest(BaseMCPModel):
     """Request to create a savepoint."""
@@ -470,6 +493,7 @@ class SavepointRequest(BaseMCPModel):
 ### Metrics Collection
 
 #### 1. Job Metrics
+
 ```python
 async def get_job_metrics(self, job_id: str) -> JobMetrics:
     """Get metrics for a job."""
@@ -504,6 +528,7 @@ async def get_job_metrics(self, job_id: str) -> JobMetrics:
 - **Custom Metrics**: Support for user-defined metrics
 
 #### 2. Log Collection
+
 ```python
 async def get_job_logs(
     self, 
@@ -535,11 +560,13 @@ async def get_job_logs(
 ### Installation and Setup
 
 1. Install the package:
+
 ```bash
 pip install beam-mcp-server
 ```
 
-2. Create a configuration file (`config/beam_mcp_config.yaml`):
+1. Create a configuration file (`config/beam_mcp_config.yaml`):
+
 ```yaml
 service:
   name: beam-mcp
@@ -624,6 +651,7 @@ metrics = await client.get_metrics(job["job_id"])
 ### REST API Examples
 
 #### List Runners
+
 ```bash
 curl http://localhost:8080/api/v1/runners \
   -H "MCP-Session-ID: my-session" \
@@ -631,6 +659,7 @@ curl http://localhost:8080/api/v1/runners \
 ```
 
 #### Create Job
+
 ```bash
 curl -X POST http://localhost:8080/api/v1/jobs \
   -H "Content-Type: application/json" \
@@ -656,6 +685,7 @@ curl -X POST http://localhost:8080/api/v1/jobs \
 ### MCP Context Headers
 
 All API endpoints support these MCP context headers:
+
 - `MCP-Session-ID`: Session identifier
 - `MCP-Trace-ID`: Trace identifier for distributed tracing
 - `MCP-Transaction-ID`: Transaction identifier for multi-step operations
@@ -664,6 +694,7 @@ All API endpoints support these MCP context headers:
 ### Runner-Specific Configuration
 
 #### Dataflow Runner
+
 ```python
 dataflow_config = {
     "project": "my-gcp-project",
@@ -675,6 +706,7 @@ dataflow_config = {
 ```
 
 #### Direct Runner (for testing)
+
 ```python
 direct_config = {
     "direct_num_workers": 4,
@@ -687,6 +719,7 @@ direct_config = {
 ### Error Handling
 
 The server returns standardized error responses:
+
 ```json
 {
     "error": {
@@ -703,6 +736,7 @@ The server returns standardized error responses:
 ### Health Check
 
 Monitor server health with the LLM-friendly endpoint:
+
 ```bash
 curl http://localhost:8080/api/v1/health/llm
 ```
@@ -710,18 +744,21 @@ curl http://localhost:8080/api/v1/health/llm
 ## Development Roadmap
 
 ### Phase 1: Core Infrastructure
+
 - [ ] Implement runner abstraction layer
 - [ ] Add pipeline portability layer
 - [ ] Create unified state management
 - [ ] Develop metrics collection system
 
-### Phase 2: Runner Support
+### Phase 2: Runner Support'
+
 - [ ] Complete Flink integration
 - [ ] Add Spark support
 - [ ] Enhance Dataflow features
 - [ ] Implement runner-specific optimizations
 
 ### Phase 3: Advanced Features
+
 - [ ] Savepoint coordination
 - [ ] Checkpoint management
 - [ ] Multiple state backends
@@ -729,6 +766,7 @@ curl http://localhost:8080/api/v1/health/llm
 - [ ] Alerting system
 
 ### Phase 4: Security & Operations
+
 - [ ] OAuth2 integration
 - [ ] Role-based access control
 - [ ] Audit logging
@@ -738,24 +776,28 @@ curl http://localhost:8080/api/v1/health/llm
 ## Best Practices
 
 ### Pipeline Design
+
 1. Use runner-agnostic transforms
 2. Implement portable state
 3. Handle backpressure
 4. Use proper windowing
 
 ### Resource Management
+
 1. Configure appropriate resources
 2. Use autoscaling wisely
 3. Monitor resource usage
 4. Handle backpressure
 
 ### State Management
+
 1. Regular checkpoints
 2. Proper cleanup policies
 3. State size monitoring
 4. Recovery testing
 
 ### Monitoring
+
 1. Key metrics tracking
 2. Proper logging
 3. Alert configuration
@@ -793,18 +835,21 @@ When developing pipelines for cross-runner compatibility, follow these parameter
 ## Current Implementation Status
 
 ### Completed Features
+
 - Basic MCP server implementation
 - Direct runner support
 - Job lifecycle management
 - Basic metrics collection
 
 ### In Progress
+
 - Flink runner integration
 - State management system
 - Pipeline portability layer
 - Resource management
 
 ### Known Limitations
+
 1. **Pipeline Portability**
    - Missing runner-specific optimization hints
    - Incomplete pipeline configuration translation
@@ -833,6 +878,7 @@ When developing pipelines for cross-runner compatibility, follow these parameter
 ## Contributing
 
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
+
 - Setting up your development environment
 - Running tests
 - Submitting pull requests
@@ -846,6 +892,7 @@ Apache License 2.0 - See [LICENSE](../LICENSE) for details.
 ### Runner Adapter Implementation
 
 #### 1. Base Runner Client
+
 ```python
 class BaseRunnerClient:
     """Base class for all runner clients."""
@@ -871,9 +918,9 @@ class BaseRunnerClient:
         raise NotImplementedError()
 ```
 
-#### 2. Runner-Specific Implementations
+##2. Runner-Specific Implementations
+#### Dataflow Runner
 
-##### Dataflow Runner
 ```python
 class DataflowClient:
     """Google Cloud Dataflow client."""
@@ -909,6 +956,7 @@ class DataflowClient:
 ```
 
 ##### Direct Runner
+
 ```python
 class DirectClient(BaseRunnerClient):
     """Client for Apache Beam Direct runner."""
@@ -955,6 +1003,7 @@ class DirectClient(BaseRunnerClient):
 ```
 
 #### 3. Client Factory
+
 ```python
 class ClientFactory:
     """Factory for creating runner clients."""
@@ -975,6 +1024,7 @@ class ClientFactory:
 ```
 
 #### 4. Runner Capabilities
+
 ```python
 class RunnerCapability(str, Enum):
     """Capabilities supported by a runner."""
@@ -1004,6 +1054,7 @@ class Runner(BaseMCPModel):
 ```
 
 #### 5. Client Manager
+
 ```python
 class BeamClientManager:
     """Manager for Apache Beam runner clients."""
@@ -1069,6 +1120,7 @@ This approach ensures parameters can be provided through various methods, making
 ##### Direct Runner
 
 The Direct runner implementation (`run_wordcount_direct.py`) demonstrates:
+
 - Local execution without external dependencies
 - In-memory processing for rapid testing
 - Custom `WordCountOptions` class for clean parameter handling
@@ -1077,6 +1129,7 @@ The Direct runner implementation (`run_wordcount_direct.py`) demonstrates:
 ##### Flink Runner
 
 The Flink runner implementation (`run_wordcount_flink.py`) showcases:
+
 - Integration with Apache Flink for distributed processing
 - Version compatibility handling (supports Flink 1.15.0+)
 - Configurable parallelism and execution settings
@@ -1085,6 +1138,7 @@ The Flink runner implementation (`run_wordcount_flink.py`) showcases:
 ##### Spark Runner
 
 The Spark runner implementation (`run_wordcount_spark.py`) illustrates:
+
 - Integration with Apache Spark for distributed processing
 - Support for both local and cluster Spark deployments
 - Custom option handling for Spark-specific parameters
@@ -1114,6 +1168,7 @@ The WordCount examples follow a consistent execution flow across all runners:
 #### Integration with Runner Clients
 
 The WordCount examples can be executed either:
+
 1. Directly via command-line using the provided scripts
 2. Through the MCP Server API using the relevant runner client:
    - `DirectClient` for local execution

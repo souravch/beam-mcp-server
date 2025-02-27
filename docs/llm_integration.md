@@ -5,6 +5,7 @@ This guide demonstrates how to integrate the Dataflow MCP server with Large Lang
 ## Overview
 
 The Dataflow MCP server provides a standardized interface that allows LLMs to:
+
 1. Discover available capabilities through the manifest endpoint
 2. Understand resource schemas and operations
 3. Execute operations with proper context management
@@ -63,6 +64,7 @@ sequenceDiagram
 ## Key Components
 
 1. **LLM (Gemini Flash 2.0)**
+
    - Understands user intent
    - Plans pipeline operations
    - Makes decisions based on metrics
@@ -83,14 +85,18 @@ sequenceDiagram
 ## Integration Patterns
 
 ### 1. Tool Discovery
+
 The LLM first discovers available capabilities through the manifest endpoint:
+
 ```python
 manifest = await mcp_client.get_manifest()
 tools = manifest["tools"]
 ```
 
 ### 2. Context Management
+
 All operations maintain proper context for tracing and state management:
+
 ```python
 context = await mcp_client.create_context(
     session_id="unique-session",
@@ -99,7 +105,9 @@ context = await mcp_client.create_context(
 ```
 
 ### 3. Resource Operations
+
 Operations are executed with proper validation and error handling:
+
 ```python
 try:
     job = await mcp_client.create_job(
@@ -111,7 +119,9 @@ except MCPError as e:
 ```
 
 ### 4. Monitoring and Control
+
 Continuous monitoring with metric analysis:
+
 ```python
 metrics = await mcp_client.get_metrics(
     job_id=job.job_id,
@@ -156,4 +166,5 @@ metrics = await mcp_client.get_metrics(
 3. **Pipeline Migration**
    - Create savepoints
    - Upgrade pipelines
-   - Verify state 
+   - Verify state
+  
