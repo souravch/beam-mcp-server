@@ -15,8 +15,13 @@ from .jobs import (
     JobMetrics, LogEntry, LogList
 )
 
-from .runners import (
-    RunnerInfo, RunnerList, RunnerScalingParameters
+from .savepoint import (
+    SavepointRequest, SavepointStatus, Savepoint
+)
+
+from .runner import (
+    Runner, RunnerList, RunnerScalingParameters,
+    RunnerStatus, RunnerCapability
 )
 
 from .context import (

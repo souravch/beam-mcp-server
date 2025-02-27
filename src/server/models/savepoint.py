@@ -18,6 +18,7 @@ class SavepointStatus(str, Enum):
 class SavepointRequest(BaseMCPModel):
     """Request to create a savepoint."""
     mcp_resource_type: Literal["savepoint_request"] = Field(default="savepoint_request")
+    mcp_resource_id: str = Field(default="savepoint_request", description="Resource ID for the request")
     
     job_id: str = Field(..., description="ID of the job to create savepoint for")
     savepoint_path: str = Field(..., description="GCS path to store the savepoint")

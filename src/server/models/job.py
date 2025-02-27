@@ -23,6 +23,16 @@ class JobStatus(str, Enum):
     DRAINING = "DRAINING"
     DRAINED = "DRAINED"
 
+class JobState(str, Enum):
+    """State of a job."""
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+    DRAINING = "DRAINING"
+    DRAINED = "DRAINED"
+
 class JobType(str, Enum):
     """Type of job execution."""
     BATCH = "BATCH"
@@ -358,6 +368,7 @@ class Job(BaseMCPModel):
     region: str = Field(..., description="Google Cloud region")
     status: JobStatus = Field(..., description="Current status of the job")
     create_time: str = Field(..., description="Job creation timestamp")
+    update_time: str = Field(..., description="Job last update timestamp")
     start_time: Optional[str] = Field(None, description="Job start timestamp")
     end_time: Optional[str] = Field(None, description="Job end timestamp")
     runner: str = Field(..., description="Runner used for the job")
@@ -385,7 +396,7 @@ class Job(BaseMCPModel):
                 "region": "us-central1",
                 "status": "RUNNING",
                 "create_time": "2023-02-25T11:50:00",
-                "start_time": "2023-02-25T12:00:00",
+                "update_time": "2023-02-25T12:00:00",
                 "runner": "dataflow",
                 "job_type": "BATCH",
                 "current_state": "RUNNING",
@@ -429,7 +440,7 @@ class JobList(BaseMCPModel):
                         "region": "us-central1",
                         "status": "RUNNING",
                         "create_time": "2023-02-25T11:50:00",
-                        "start_time": "2023-02-25T12:00:00",
+                        "update_time": "2023-02-25T12:00:00",
                         "runner": "dataflow",
                         "job_type": "BATCH",
                         "current_state": "RUNNING"

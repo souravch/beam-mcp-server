@@ -25,7 +25,17 @@ runners:
     enabled: false
 
   flink:
-    enabled: false
+    enabled: true
+    jobmanager_url: http://localhost:8081
+    options:
+      parallelism: 4
+      checkpointing_interval: 10000
+      state_backend: rocksdb
+      state_backend_path: /tmp/flink-state
+      restart_strategy: fixed-delay
+      restart_attempts: 3
+      restart_delay: 10000
+      temp_location: /tmp/flink-test
 
 interfaces:
   jobs:
@@ -43,7 +53,9 @@ interfaces:
     max_entries_per_request: 1000
   
   savepoints:
-    enabled: false
+    enabled: true
+    retention_days: 7
+    max_concurrent_savepoints: 3
 
 security:
   auth_enabled: false

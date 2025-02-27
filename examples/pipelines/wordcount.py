@@ -31,24 +31,25 @@ def create_pipeline(pipeline_options: PipelineOptions) -> beam.Pipeline:
     Returns:
         The pipeline object
     """
-    with beam.Pipeline(options=pipeline_options) as pipeline:
-        lines = pipeline | 'Read' >> beam.Create([
-            'To be, or not to be: that is the question:',
-            'Whether tis nobler in the mind to suffer',
-            'The slings and arrows of outrageous fortune,',
-            'Or to take arms against a sea of troubles,'
-        ])
-        
-        counts = (
-            lines
-            | 'Split' >> beam.ParDo(WordExtractingDoFn())
-            | 'PairWithOne' >> beam.Map(lambda x: (x, 1))
-            | 'GroupAndSum' >> beam.CombinePerKey(sum)
-        )
-        
-        # Write results to a text file
-        counts | 'Format' >> beam.Map(lambda kv: f'{kv[0]}: {kv[1]}') | 'Write' >> beam.io.WriteToText('wordcount_output')
-        
+    pipeline = beam.Pipeline(options=pipeline_options)
+    
+    lines = pipeline | 'Read' >> beam.Create([
+        'To be, or not to be: that is the question:',
+        'Whether tis nobler in the mind to suffer',
+        'The slings and arrows of outrageous fortune,',
+        'Or to take arms against a sea of troubles,'
+    ])
+    
+    counts = (
+        lines
+        | 'Split' >> beam.ParDo(WordExtractingDoFn())
+        | 'PairWithOne' >> beam.Map(lambda x: (x, 1))
+        | 'GroupAndSum' >> beam.CombinePerKey(sum)
+    )
+    
+    # Write results to a text file
+    counts | 'Format' >> beam.Map(lambda kv: f'{kv[0]}: {kv[1]}') | 'Write' >> beam.io.WriteToText('wordcount_output')
+    
     return pipeline
 
 def run(pipeline_options: PipelineOptions) -> None:

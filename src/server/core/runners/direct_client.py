@@ -1,8 +1,7 @@
 """
 Direct runner client for Apache Beam MCP server.
 
-This module provides a client implementation for the Direct runner,
-which is used for local development and testing.
+This module provides a client implementation for the Direct runner.
 """
 
 import logging
@@ -10,139 +9,255 @@ import uuid
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import apache_beam as beam
-from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions
+from apache_beam.options.pipeline_options import PipelineOptions
+from apache_beam.runners.runner import PipelineState
+import importlib.util
 
-from ...models import (
-    JobParameters, JobInfo, JobState, JobType,
-    SavepointParameters, SavepointInfo,
-    JobMetrics, LogEntry
-)
+from ...models.job import JobParameters, Job, JobStatus, JobType, JobState
+from ...models.savepoint import SavepointRequest, Savepoint
+from ...models.metrics import JobMetrics
+from ...models.runner import Runner, RunnerType, RunnerStatus, RunnerCapability
 from .base_client import BaseRunnerClient
 
 logger = logging.getLogger(__name__)
 
 class DirectClient(BaseRunnerClient):
-    """Client for Apache Beam Direct runner."""
+    """Client implementation for Direct runner."""
     
     def __init__(self, config: Dict[str, Any]):
         """
         Initialize the Direct runner client.
         
         Args:
-            config (Dict[str, Any]): Configuration for the Direct runner
+            config (Dict[str, Any]): Runner configuration
         """
-        super().__init__()
-        self.config = config
-        self.jobs = {}  # In-memory job storage
-        self.pipeline_results = {}  # Store pipeline results
+        super().__init__(config)
+        self._validate_config()
+        self._jobs: Dict[str, Dict[str, Any]] = {}
         
-    async def create_job(self, params: JobParameters) -> JobInfo:
+    async def create_job(self, params: JobParameters) -> Job:
         """
-        Create and run a job using the Direct runner.
+        Create a new Direct runner job.
         
         Args:
             params (JobParameters): Job parameters
             
         Returns:
-            JobInfo: Information about the created job
+            Job: Created job
         """
         job_id = str(uuid.uuid4())
         
+        # Set up pipeline options
+        pipeline_options = {
+            'runner': 'DirectRunner',
+            'direct_num_workers': self.config.get('direct_num_workers', 1),
+            'direct_running_mode': self.config.get('direct_running_mode', 'in_memory'),
+            'save_main_session': True,
+            **params.pipeline_options
+        }
+        
         try:
-            # Prepare pipeline options
-            options = {
-                'runner': 'DirectRunner',
-                'direct_num_workers': self.config.get('options', {}).get('direct_num_workers', 1),
-                'direct_running_mode': self.config.get('options', {}).get('direct_running_mode', 'in_memory'),
-                **params.pipeline_options
-            }
+            # Import and run the pipeline
+            import sys
+            module_name = f"pipeline_module_{job_id}"
+            spec = importlib.util.spec_from_file_location(module_name, params.code_path)
+            if not spec or not spec.loader:
+                raise ImportError(f"Could not load pipeline from {params.code_path}")
             
-            pipeline_options = PipelineOptions.from_dictionary(options)
-            if params.job_type == JobType.STREAMING:
-                pipeline_options.view_as(StandardOptions).streaming = True
+            pipeline_module = importlib.util.module_from_spec(spec)
+            sys.modules[module_name] = pipeline_module
+            spec.loader.exec_module(pipeline_module)
             
             # Create and run pipeline
-            if params.template_path:
-                # Load from template
-                pipeline = beam.Pipeline.from_template(
-                    params.template_path,
-                    parameters=params.template_parameters or {},
-                    options=pipeline_options
-                )
-            else:
-                # Load from code path
-                pipeline = self._load_pipeline_from_code(
-                    params.code_path,
-                    pipeline_options
-                )
+            pipeline = pipeline_module.create_pipeline(PipelineOptions(pipeline_options))
             
-            # Run pipeline in background
+            # Store job info
             result = pipeline.run()
-            self.pipeline_results[job_id] = result
             
-            # Create job info
-            job_info = JobInfo(
+            # Initially set to RUNNING
+            now = datetime.utcnow().isoformat()
+            self._jobs[job_id] = {
+                'pipeline': pipeline,
+                'start_time': now,
+                'status': JobStatus.RUNNING,
+                'result': result,
+                'job_name': params.job_name,
+                'pipeline_options': pipeline_options,
+                'job_type': params.job_type,
+                'last_check': now
+            }
+            
+            return Job(
+                mcp_resource_id=job_id,
                 job_id=job_id,
-                name=params.job_name,
-                state=JobState.RUNNING,
-                runner_type='direct',
-                creation_time=datetime.utcnow(),
-                pipeline_options=options,
-                template_path=params.template_path,
-                code_path=params.code_path
+                job_name=params.job_name,
+                project=params.pipeline_options.get('project', 'local'),
+                region=params.pipeline_options.get('region', 'local'),
+                status=JobStatus.RUNNING,
+                create_time=now,
+                update_time=now,
+                runner=RunnerType.DIRECT,
+                job_type=params.job_type,
+                pipeline_options=pipeline_options,
+                current_state=JobState.RUNNING
             )
-            
-            self.jobs[job_id] = job_info
-            return job_info
             
         except Exception as e:
             logger.error(f"Failed to create Direct runner job: {str(e)}")
-            raise
+            now = datetime.utcnow().isoformat()
+            return Job(
+                mcp_resource_id=job_id,
+                job_id=job_id,
+                job_name=params.job_name,
+                project=params.pipeline_options.get('project', 'local'),
+                region=params.pipeline_options.get('region', 'local'),
+                status=JobStatus.FAILED,
+                create_time=now,
+                update_time=now,
+                runner=RunnerType.DIRECT,
+                job_type=params.job_type,
+                pipeline_options=pipeline_options,
+                current_state=JobState.FAILED,
+                error_message=str(e)
+            )
     
-    async def get_job(self, job_id: str) -> Optional[JobInfo]:
-        """
-        Get information about a job.
-        
-        Args:
-            job_id (str): Job ID
-            
-        Returns:
-            Optional[JobInfo]: Job information if found
-        """
-        job = self.jobs.get(job_id)
-        if not job:
+    async def get_job(self, job_id: str) -> Optional[Job]:
+        """Get job details."""
+        if job_id not in self._jobs:
             return None
-            
-        # Update job state from pipeline result
-        result = self.pipeline_results.get(job_id)
+        
+        job_info = self._jobs[job_id]
+        result = job_info.get('result')
+        
+        # Check pipeline state
         if result:
-            try:
-                state = result.state
-                if state in [beam.runners.runner.PipelineState.DONE]:
-                    job.state = JobState.SUCCEEDED
-                elif state in [beam.runners.runner.PipelineState.FAILED]:
-                    job.state = JobState.FAILED
-                elif state in [beam.runners.runner.PipelineState.CANCELLED]:
-                    job.state = JobState.CANCELLED
-                elif state in [beam.runners.runner.PipelineState.RUNNING]:
-                    job.state = JobState.RUNNING
-            except:
-                pass
+            state = result.state
+            now = datetime.utcnow().isoformat()
+            
+            # Update last check time
+            job_info['last_check'] = now
+            
+            # Check if the pipeline has completed
+            if state in [PipelineState.DONE, PipelineState.STOPPED]:
+                if job_info.get('status') != JobStatus.SUCCEEDED:
+                    job_info['status'] = JobStatus.SUCCEEDED
+                    job_info['update_time'] = now
+                    job_info['end_time'] = now
                 
-        return job
+                return Job(
+                    mcp_resource_id=job_id,
+                    job_id=job_id,
+                    job_name=job_info['job_name'],
+                    status=JobStatus.SUCCEEDED,
+                    create_time=job_info['start_time'],
+                    update_time=now,
+                    end_time=now,
+                    runner=RunnerType.DIRECT,
+                    job_type=job_info['job_type'],
+                    pipeline_options=job_info['pipeline_options'],
+                    current_state=JobState.SUCCEEDED
+                )
+            elif state == PipelineState.FAILED:
+                if job_info.get('status') != JobStatus.FAILED:
+                    job_info['status'] = JobStatus.FAILED
+                    job_info['update_time'] = now
+                    job_info['end_time'] = now
+                
+                return Job(
+                    mcp_resource_id=job_id,
+                    job_id=job_id,
+                    job_name=job_info['job_name'],
+                    status=JobStatus.FAILED,
+                    create_time=job_info['start_time'],
+                    update_time=now,
+                    end_time=now,
+                    runner=RunnerType.DIRECT,
+                    job_type=job_info['job_type'],
+                    pipeline_options=job_info['pipeline_options'],
+                    current_state=JobState.FAILED
+                )
+            elif state == PipelineState.CANCELLED:
+                if job_info.get('status') != JobStatus.CANCELLED:
+                    job_info['status'] = JobStatus.CANCELLED
+                    job_info['update_time'] = now
+                    job_info['end_time'] = now
+                
+                return Job(
+                    mcp_resource_id=job_id,
+                    job_id=job_id,
+                    job_name=job_info['job_name'],
+                    status=JobStatus.CANCELLED,
+                    create_time=job_info['start_time'],
+                    update_time=now,
+                    end_time=now,
+                    runner=RunnerType.DIRECT,
+                    job_type=job_info['job_type'],
+                    pipeline_options=job_info['pipeline_options'],
+                    current_state=JobState.CANCELLED
+                )
+            
+            # Check if the pipeline has completed by looking at the result state
+            try:
+                result.wait_until_finish(duration=0)  # Check current state without waiting
+                if result.state in [PipelineState.DONE, PipelineState.STOPPED]:
+                    if job_info.get('status') != JobStatus.SUCCEEDED:
+                        job_info['status'] = JobStatus.SUCCEEDED
+                        job_info['update_time'] = now
+                        job_info['end_time'] = now
+                    
+                    return Job(
+                        mcp_resource_id=job_id,
+                        job_id=job_id,
+                        job_name=job_info['job_name'],
+                        status=JobStatus.SUCCEEDED,
+                        create_time=job_info['start_time'],
+                        update_time=now,
+                        end_time=now,
+                        runner=RunnerType.DIRECT,
+                        job_type=job_info['job_type'],
+                        pipeline_options=job_info['pipeline_options'],
+                        current_state=JobState.SUCCEEDED
+                    )
+            except Exception as e:
+                logger.debug(f"Error checking pipeline state: {str(e)}")
+        
+        # Job is still running
+        return Job(
+            mcp_resource_id=job_id,
+            job_id=job_id,
+            job_name=job_info['job_name'],
+            status=JobStatus.RUNNING,
+            create_time=job_info['start_time'],
+            update_time=job_info.get('update_time', job_info['start_time']),
+            runner=RunnerType.DIRECT,
+            job_type=job_info['job_type'],
+            pipeline_options=job_info['pipeline_options'],
+            current_state=JobState.RUNNING
+        )
     
-    async def list_jobs(self) -> List[JobInfo]:
+    async def list_jobs(self) -> List[Job]:
         """
-        List all jobs.
+        List all Direct runner jobs.
         
         Returns:
-            List[JobInfo]: List of jobs
+            List[Job]: List of jobs
         """
-        return list(self.jobs.values())
+        jobs = []
+        for job_id, job_info in self._jobs.items():
+            jobs.append(
+                Job(
+                    job_id=job_id,
+                    status=job_info['status'],
+                    create_time=job_info['start_time'],
+                    runner=RunnerType.DIRECT,
+                    current_state=JobState.SUCCEEDED if job_info['status'] == JobStatus.SUCCEEDED else JobState.FAILED
+                )
+            )
+        return jobs
     
     async def cancel_job(self, job_id: str) -> bool:
         """
-        Cancel a running job.
+        Cancel a running Direct runner job.
         
         Args:
             job_id (str): Job ID
@@ -150,23 +265,24 @@ class DirectClient(BaseRunnerClient):
         Returns:
             bool: True if cancelled successfully
         """
-        job = self.jobs.get(job_id)
-        if not job:
+        if job_id not in self._jobs:
             return False
             
-        result = self.pipeline_results.get(job_id)
-        if result:
-            try:
-                result.cancel()
-                job.state = JobState.CANCELLED
+        job_info = self._jobs[job_id]
+        
+        try:
+            if 'result' in job_info:
+                job_info['result'].cancel()
+                job_info['status'] = JobStatus.CANCELLED
                 return True
-            except:
-                return False
+        except Exception as e:
+            logger.error(f"Failed to cancel Direct runner job: {str(e)}")
+            
         return False
     
     async def get_metrics(self, job_id: str) -> Optional[JobMetrics]:
         """
-        Get metrics for a job.
+        Get Direct runner job metrics.
         
         Args:
             job_id (str): Job ID
@@ -174,64 +290,86 @@ class DirectClient(BaseRunnerClient):
         Returns:
             Optional[JobMetrics]: Job metrics if available
         """
-        result = self.pipeline_results.get(job_id)
+        if job_id not in self._jobs:
+            return None
+            
+        job_info = self._jobs[job_id]
+        result = job_info.get('result')
+        
         if not result:
             return None
             
         try:
-            metrics = result.metrics()
-            return JobMetrics(
+            metrics = JobMetrics(
                 job_id=job_id,
-                metrics={
-                    'counters': metrics.query(beam.metrics.MetricsFilter().with_name('.*'))['counters'],
-                    'distributions': metrics.query(beam.metrics.MetricsFilter().with_name('.*'))['distributions'],
-                    'gauges': metrics.query(beam.metrics.MetricsFilter().with_name('.*'))['gauges']
-                },
-                timestamp=datetime.utcnow()
+                metrics=[],
+                timestamp=datetime.utcnow().isoformat()
             )
-        except:
-            return None
+            
+            # Get metrics from result
+            metric_results = result.metrics().query()
+            for metric in metric_results['counters']:
+                metrics.add_metric(
+                    name=metric.key.metric.name,
+                    value=metric.committed,
+                    labels={
+                        'namespace': metric.key.metric.namespace,
+                        'step': metric.key.step
+                    }
+                )
+            
+            return metrics
+            
+        except Exception as e:
+            logger.error(f"Failed to get Direct runner metrics: {str(e)}")
+            
+        return None
     
-    async def get_logs(self, job_id: str, start_time: Optional[datetime] = None) -> List[LogEntry]:
+    async def create_savepoint(self, job_id: str, params: SavepointRequest) -> Savepoint:
         """
-        Get logs for a job.
+        Create a savepoint for a Direct runner job.
         
         Args:
             job_id (str): Job ID
-            start_time (datetime, optional): Start time for logs
+            params (SavepointRequest): Savepoint parameters
             
         Returns:
-            List[LogEntry]: List of log entries
+            Savepoint: Created savepoint
+            
+        Raises:
+            NotImplementedError: Direct runner does not support savepoints
         """
-        # Direct runner doesn't support log retrieval
-        # In a real implementation, we could capture logs during pipeline execution
-        return []
+        raise NotImplementedError("Savepoints are not supported by the Direct runner")
     
-    def _load_pipeline_from_code(self, code_path: str, options: PipelineOptions):
+    async def get_runner_info(self) -> Runner:
         """
-        Load a pipeline from Python code.
+        Get information about the Direct runner.
         
-        Args:
-            code_path (str): Path to pipeline code
-            options (PipelineOptions): Pipeline options
-            
         Returns:
-            Pipeline: Beam pipeline
+            Runner: Runner information
         """
-        try:
-            # Import pipeline module
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("pipeline", code_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            
-            # Create pipeline
-            if hasattr(module, 'create_pipeline'):
-                return module.create_pipeline(options)
-            elif hasattr(module, 'run'):
-                return module.run(options)
-            else:
-                raise ValueError(f"No pipeline creation function found in {code_path}")
-        except Exception as e:
-            logger.error(f"Failed to load pipeline from code: {str(e)}")
-            raise 
+        return Runner(
+            mcp_resource_id="direct-runner",
+            name="Direct Runner",
+            runner_type=RunnerType.DIRECT,
+            status=RunnerStatus.AVAILABLE,
+            description="Local Direct runner for Apache Beam",
+            capabilities=[
+                RunnerCapability.BATCH,
+                RunnerCapability.METRICS,
+                RunnerCapability.LOGGING
+            ],
+            config=self.config,
+            version=beam.__version__,
+            mcp_provider="apache"
+        )
+    
+    def _validate_config(self) -> None:
+        """
+        Validate Direct runner configuration.
+        
+        Raises:
+            ValueError: If configuration is invalid
+        """
+        super()._validate_config()
+        # No additional validation needed for Direct runner 

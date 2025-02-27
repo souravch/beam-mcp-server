@@ -1,0 +1,10 @@
+Hello world!
+This is a sample text file for testing the WordCount pipeline.
+It contains some words that will be counted.
+Some words appear multiple times, like words, words, words.
+Apache Beam is a unified programming model for batch and streaming data processing.
+Apache Beam provides a portable API layer for building sophisticated data processing pipelines.
+With Apache Beam, you can build batch and streaming pipelines in a unified way.
+This approach makes it easy to switch between batch and streaming execution models.
+Flink is one of the runners supported by Apache Beam.
+Let's run this WordCount example on Flink to see it in action! 

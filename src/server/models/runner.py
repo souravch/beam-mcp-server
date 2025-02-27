@@ -32,6 +32,16 @@ class RunnerCapability(str, Enum):
     METRICS = "metrics"
     LOGGING = "logging"
 
+class RunnerScalingParameters(BaseMCPModel):
+    """Parameters for scaling a runner."""
+    mcp_resource_type: Literal["runner_scaling_parameters"] = Field(default="runner_scaling_parameters")
+    
+    min_workers: Optional[int] = Field(None, description="Minimum number of workers")
+    max_workers: Optional[int] = Field(None, description="Maximum number of workers")
+    scaling_algorithm: Optional[str] = Field(None, description="Scaling algorithm to use")
+    target_cpu_utilization: Optional[float] = Field(None, description="Target CPU utilization for autoscaling")
+    target_throughput_per_worker: Optional[int] = Field(None, description="Target throughput per worker")
+
 class Runner(BaseMCPModel):
     """Represents a pipeline runner."""
     mcp_resource_type: Literal["runner"] = Field(default="runner")

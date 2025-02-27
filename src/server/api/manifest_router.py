@@ -31,7 +31,7 @@ async def get_manifest(request: Request):
     manifest = {
         "schema_version": "1.0",
         "tool_type": "mcp_server",
-        "name": "beam_mcp",
+        "name": "beam-mcp",
         "display_name": "Apache Beam MCP Server",
         "description": "Model Context Protocol server for managing Apache Beam data pipelines",
         "capabilities": [

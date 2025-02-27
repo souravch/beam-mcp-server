@@ -8,9 +8,8 @@ import logging
 from typing import Dict, Any, Optional
 
 from ..models import RunnerType
+from ..services.dataflow_client import DataflowClient
 from .runners.direct_client import DirectClient
-from .runners.dataflow_client import DataflowClient
-from .runners.spark_client import SparkClient
 from .runners.flink_client import FlinkClient
 
 logger = logging.getLogger(__name__)
@@ -33,14 +32,23 @@ class ClientFactory:
         Raises:
             ValueError: If client creation fails
         """
+        logger.info(f"Creating client for runner type: {runner_type}")
+        logger.debug(f"Runner config: {config}")
+        
         try:
             if runner_type == RunnerType.DIRECT:
+                logger.info("Creating Direct runner client")
                 return DirectClient(config)
             elif runner_type == RunnerType.DATAFLOW:
+                logger.info("Creating Dataflow runner client")
                 return DataflowClient(config)
             elif runner_type == RunnerType.SPARK:
+                logger.info("Creating Spark runner client")
+                # Import SparkClient only when needed
+                from .runners.spark_client import SparkClient
                 return SparkClient(config)
             elif runner_type == RunnerType.FLINK:
+                logger.info("Creating Flink runner client")
                 return FlinkClient(config)
             else:
                 raise ValueError(f"Unsupported runner type: {runner_type}")
