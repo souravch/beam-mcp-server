@@ -1,0 +1,61 @@
+service:
+  name: beam-mcp
+  type: beam
+  description: Apache Beam MCP Server with Spark Runner
+  version: 1.0.0
+
+default_runner: spark
+
+runners:
+  spark:
+    enabled: true
+    spark_master: local[*]
+    app_name: beam-mcp-spark
+    rest_api_port: 4040
+    pipeline_options:
+      spark_home: ${SPARK_HOME}
+      parallelism: 4
+      driver_memory: 1g
+      executor_memory: 2g
+      executor_cores: 2
+      save_main_session: true
+      temp_location: /tmp/beam-spark-tmp
+      
+  # Include other runners but disable them for this test configuration
+  flink:
+    enabled: false
+    jobmanager_url: http://localhost:8081
+    flink_master: localhost:8081
+    
+  direct:
+    enabled: false
+    pipeline_options:
+      direct_num_workers: 4
+      direct_running_mode: multi_threading
+      
+  dataflow:
+    enabled: false
+
+interfaces:
+  jobs:
+    enabled: true
+  
+  metrics:
+    enabled: true
+  
+  logs:
+    enabled: true
+  
+  savepoints:
+    enabled: true
+    default_savepoint_dir: /tmp/beam-savepoints
+
+mcp:
+  version: 1.0
+  server_name: beam-mcp-server
+  provider: apache
+  log_level: DEBUG  # Set to DEBUG to get more information
+
+gcp:
+  project_id: your-gcp-project-id  # Will be ignored since Dataflow is disabled
+  region: us-central1 
