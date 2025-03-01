@@ -69,6 +69,18 @@ class BaseRunnerClient:
         """
         raise NotImplementedError()
     
+    async def list_job_ids(self) -> List[str]:
+        """
+        List all job IDs.
+        
+        Returns:
+            List[str]: List of job IDs
+            
+        Raises:
+            NotImplementedError: Must be implemented by subclasses
+        """
+        raise NotImplementedError()
+    
     async def cancel_job(self, job_id: str) -> bool:
         """
         Cancel a running job.

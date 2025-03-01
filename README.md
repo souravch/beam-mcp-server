@@ -75,6 +75,8 @@ curl -X POST http://localhost:8082/api/v1/jobs \
 - [System Design](docs/DESIGN.md) - Architecture and implementation details
 - [MCP Compliance](docs/mcp-compliance.md) - MCP protocol implementation
 - [LLM Integration](docs/llm_integration.md) - AI/LLM integration guide
+- [Local Environment Requirements](tests/README.md#local-environment-requirements) - Setup requirements for local testing
+- [Troubleshooting Guide](docs/TROUBLESHOOTING.md) - Common issues and solutions
 - [Contributing Guide](CONTRIBUTING.md) - How to contribute
 - [Tests README](tests/README.md) - Testing information
 

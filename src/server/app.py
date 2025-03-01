@@ -337,4 +337,28 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> FastAPI:
 
 if __name__ == '__main__':
     import uvicorn
-    uvicorn.run(create_app(), host="0.0.0.0", port=8000) 
+    import argparse
+    import sys
+    
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description='Apache Beam MCP Server')
+    parser.add_argument('-c', '--config', help='Path to config file')
+    parser.add_argument('-p', '--port', type=int, default=8000, help='Port to listen on')
+    parser.add_argument('--host', default='0.0.0.0', help='Host to bind to')
+    args = parser.parse_args()
+    
+    # Load config from file if provided
+    config = None
+    if args.config:
+        try:
+            config = load_config(args.config)
+            logger.info(f"Loaded configuration from {args.config}")
+        except Exception as e:
+            logger.error(f"Failed to load config from {args.config}: {str(e)}")
+            sys.exit(1)
+    
+    # Create app with config
+    app = create_app(config)
+    
+    # Run with uvicorn
+    uvicorn.run(app, host=args.host, port=args.port)

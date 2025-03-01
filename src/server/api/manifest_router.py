@@ -32,6 +32,7 @@ async def get_manifest(request: Request):
         # Create a simplified manifest without complex objects
         manifest = {
             "schema_version": "1.0",
+            "version": "1.0.0",
             "tool_type": "mcp_server",
             "name": "beam-mcp",
             "display_name": "Apache Beam MCP Server",
@@ -55,6 +56,32 @@ async def get_manifest(request: Request):
                 "cancel_job": "/api/v1/jobs/{job_id}",
                 "get_job_metrics": "/api/v1/jobs/{job_id}/metrics",
                 "health": "/api/v1/health/health"
+            },
+            "configurations": {
+                "supported_runners": {
+                    "spark": {
+                        "display_name": "Apache Spark",
+                        "description": "Apache Spark runner for batch processing",
+                        "versions_supported": ["3.3.0"],
+                        "deployment_modes": ["local", "cluster"]
+                    },
+                    "flink": {
+                        "display_name": "Apache Flink",
+                        "description": "Apache Flink runner for streaming and batch processing",
+                        "versions_supported": ["1.17.0"],
+                        "deployment_modes": ["local", "session"]
+                    },
+                    "direct": {
+                        "display_name": "Direct Runner",
+                        "description": "Apache Beam DirectRunner for local execution",
+                        "versions_supported": ["2.50.0"],
+                        "deployment_modes": ["local"]
+                    }
+                },
+                "server_info": {
+                    "version": "1.0.0",
+                    "beam_sdk_version": "2.50.0"
+                }
             }
         }
         
