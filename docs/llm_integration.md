@@ -1,170 +1,142 @@
 # LLM Integration Guide
 
-This guide demonstrates how to integrate the Dataflow MCP server with Large Language Models (LLMs) for agentic control of data pipelines.
+This guide shows how to integrate the Apache Beam MCP Server with Large Language Models (LLMs) for AI-controlled data pipelines.
 
-## Overview
+## Quick Start
 
-The Dataflow MCP server provides a standardized interface that allows LLMs to:
+```python
+import requests
+import json
 
-1. Discover available capabilities through the manifest endpoint
-2. Understand resource schemas and operations
-3. Execute operations with proper context management
-4. Handle errors and state transitions
-5. Monitor and control pipeline execution
+# 1. Fetch the server manifest to discover capabilities
+manifest = requests.get("http://localhost:8082/api/v1/manifest").json()
 
-## Sequence Diagram
+# 2. Set up persistent session ID for context tracking
+headers = {"MCP-Session-ID": "llm-session-123"}
+
+# 3. List available runners
+runners = requests.get(
+    "http://localhost:8082/api/v1/runners", 
+    headers=headers
+).json()
+
+# 4. Create a data processing job
+job = requests.post(
+    "http://localhost:8082/api/v1/jobs",
+    headers=headers,
+    json={
+        "job_name": "llm-controlled-wordcount",
+        "runner_type": "flink",
+        "job_type": "BATCH",
+        "code_path": "examples/pipelines/wordcount.py",
+        "pipeline_options": {
+            "parallelism": 2,
+            "input_file": "/tmp/input.txt",
+            "output_path": "/tmp/output"
+        }
+    }
+).json()
+
+# 5. Monitor the job
+job_status = requests.get(
+    f"http://localhost:8082/api/v1/jobs/{job['data']['job_id']}",
+    headers=headers
+).json()
+```
+
+## Integration Architecture
+
+LLMs can interact with the Apache Beam MCP Server in two key ways:
+
+1. **Direct API Integration**: LLM makes API calls based on user requests
+2. **Agent-based**: LLM delegates to a specialized agent that manages pipelines
+
+### Sequence Flow
 
 ```mermaid
 sequenceDiagram
-    participant User
-    participant LLM as Gemini Flash 2.0
-    participant Agent as Pipeline Agent
-    participant MCP as Dataflow MCP Server
-    participant Dataflow as Google Cloud Dataflow
-
-    User->>LLM: Request to process streaming data
+    User->>LLM: "Process my stream of events"
     LLM->>MCP: GET /api/v1/manifest
-    MCP-->>LLM: Tool manifest with capabilities
+    MCP-->>LLM: Tool manifest
+    LLM->>MCP: GET /api/v1/runners
+    MCP-->>LLM: Available runners
+    LLM->>MCP: POST /api/v1/jobs (create job)
+    MCP-->>LLM: Job details
     
-    LLM->>Agent: Initialize with manifest
-    Agent->>MCP: Create session context
-    MCP-->>Agent: Session ID
-    
-    Note over LLM,Agent: Plan pipeline steps
-    
-    Agent->>MCP: List available runners
-    MCP-->>Agent: Runner capabilities
-    
-    Agent->>MCP: Create streaming job
-    MCP->>Dataflow: Launch pipeline
-    Dataflow-->>MCP: Job ID
-    MCP-->>Agent: Job details
-    
-    loop Monitor Execution
-        Agent->>MCP: Get job metrics
-        MCP->>Dataflow: Fetch metrics
-        Dataflow-->>MCP: Current metrics
-        MCP-->>Agent: Metrics response
-        Agent->>LLM: Analyze metrics
-        LLM-->>Agent: Recommendations
-        
-        alt Needs Scaling
-            Agent->>MCP: Update job (scale)
-            MCP->>Dataflow: Apply scaling
-        else Needs Checkpoint
-            Agent->>MCP: Create savepoint
-            MCP->>Dataflow: Trigger savepoint
-        end
+    loop Monitor
+        LLM->>MCP: GET /api/v1/jobs/{id}/status
+        MCP-->>LLM: Job status
+        LLM->>MCP: GET /api/v1/jobs/{id}/metrics
+        MCP-->>LLM: Current metrics
     end
     
-    Agent->>LLM: Report status
-    LLM->>User: Provide summary
+    LLM->>User: "Your data is being processed. Found 1.2M events..."
 ```
 
-## Key Components
+## Key Integration Points
 
-1. **LLM (Gemini Flash 2.0)**
+### 1. Discovery Phase
 
-   - Understands user intent
-   - Plans pipeline operations
-   - Makes decisions based on metrics
-   - Provides high-level guidance
-
-2. **Pipeline Agent**
-   - Maintains MCP context
-   - Executes LLM decisions
-   - Monitors pipeline health
-   - Handles error recovery
-
-3. **MCP Server**
-   - Provides tool discovery
-   - Manages resources
-   - Handles state transitions
-   - Ensures protocol compliance
-
-## Integration Patterns
-
-### 1. Tool Discovery
-
-The LLM first discovers available capabilities through the manifest endpoint:
+LLMs should first discover the available tools by calling the manifest endpoint:
 
 ```python
-manifest = await mcp_client.get_manifest()
-tools = manifest["tools"]
+manifest = requests.get("http://localhost:8082/api/v1/manifest").json()
 ```
 
-### 2. Context Management
+The manifest includes:
+- Available API endpoints
+- Expected parameters
+- Supported runners
+- Job types
 
-All operations maintain proper context for tracing and state management:
+### 2. Job Lifecycle Management
+
+LLMs can create and manage jobs with the following endpoints:
+
+| Operation | Endpoint | Method | Description |
+|-----------|----------|--------|-------------|
+| Create job | `/api/v1/jobs` | POST | Create a new pipeline job |
+| List jobs | `/api/v1/jobs` | GET | List all jobs |
+| Get job | `/api/v1/jobs/{id}` | GET | Get job details |
+| Cancel job | `/api/v1/jobs/{id}` | DELETE | Cancel a job |
+| Get metrics | `/api/v1/jobs/{id}/metrics` | GET | Get job metrics |
+
+### 3. Error Handling
+
+LLMs should always check the `success` field and handle errors gracefully:
 
 ```python
-context = await mcp_client.create_context(
-    session_id="unique-session",
-    user_id="user-123"
-)
+response = requests.get("http://localhost:8082/api/v1/jobs/invalid-id").json()
+if not response["success"]:
+    # Handle error case
+    print(f"Error: {response['error']}")
 ```
 
-### 3. Resource Operations
+## Example: LLM-controlled Flink Job
 
-Operations are executed with proper validation and error handling:
+This example shows how to implement an LLM-controlled Flink job that processes data:
 
 ```python
-try:
-    job = await mcp_client.create_job(
-        params=job_params,
-        context=context
+def create_flink_job(input_file, output_path, parallelism=2):
+    """Create a Flink job based on user request."""
+    response = requests.post(
+        "http://localhost:8082/api/v1/jobs",
+        headers={"MCP-Session-ID": "llm-session-456"},
+        json={
+            "job_name": "user-requested-analysis",
+            "runner_type": "flink",
+            "job_type": "BATCH",
+            "code_path": "examples/pipelines/wordcount.py",
+            "pipeline_options": {
+                "parallelism": parallelism,
+                "jar_path": "/path/to/beam-examples.jar",
+                "entry_class": "org.apache.beam.examples.WordCount",
+                "program_args": f"--input {input_file} --output {output_path}"
+            }
+        }
     )
-except MCPError as e:
-    # Handle error
+    return response.json()
 ```
 
-### 4. Monitoring and Control
-
-Continuous monitoring with metric analysis:
-
-```python
-metrics = await mcp_client.get_metrics(
-    job_id=job.job_id,
-    context=context
-)
-```
-
-## Best Practices
-
-1. **Context Preservation**
-   - Maintain session context across interactions
-   - Include trace IDs for debugging
-   - Preserve user context for permissions
-
-2. **Error Handling**
-   - Handle MCPErrors appropriately
-   - Implement retry logic
-   - Maintain error context
-
-3. **Resource Lifecycle**
-   - Clean up resources properly
-   - Monitor resource states
-   - Handle timeouts
-
-4. **Security**
-   - Validate LLM decisions
-   - Implement rate limiting
-   - Monitor resource usage
-
-## Example Use Cases
-
-1. **Streaming Pipeline Management**
-   - Create and monitor streaming jobs
-   - Auto-scale based on metrics
-   - Handle backpressure
-
-2. **Batch Processing**
-   - Schedule batch jobs
-   - Monitor progress
-   - Handle failures
-
-3. **Pipeline Migration**
-   - Create savepoints
-   - Upgrade pipelines
-   - Verify state
+For a complete example implementation, see `examples/llm_agent.py` in the repository.
   

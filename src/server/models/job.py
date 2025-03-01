@@ -16,22 +16,55 @@ from .jobs import JobParameters
 class JobStatus(str, Enum):
     """Status of a job."""
     PENDING = "PENDING"
+    CREATING = "CREATING"  # Job is being created
+    PREPARING = "PREPARING"  # Job is being prepared (e.g., compiling)
+    SUBMITTING = "SUBMITTING"  # Job is being submitted to the cluster
+    STARTING = "STARTING"  # Job is starting on the cluster
     RUNNING = "RUNNING"
-    COMPLETED = "COMPLETED"
+    SUCCEEDED = "SUCCEEDED"  # Completed successfully
+    COMPLETED = "COMPLETED"  # Backward compatibility
     FAILED = "FAILED"
-    CANCELLED = "CANCELLED"
+    CANCELLED = "CANCELLED"  
+    CANCELLING = "CANCELLING"  # Job is being cancelled
+    UNKNOWN = "UNKNOWN"  # Job state is unknown
     DRAINING = "DRAINING"
     DRAINED = "DRAINED"
+    STOPPED = "STOPPED"  # Job is stopped
+    RESTARTING = "RESTARTING"  # Job is restarting
+    UPDATING = "UPDATING"  # Job is being updated
 
 class JobState(str, Enum):
     """State of a job."""
     PENDING = "PENDING"
+    CREATING = "CREATING" 
+    PREPARING = "PREPARING"
+    SUBMITTING = "SUBMITTING"
+    STARTING = "STARTING"
     RUNNING = "RUNNING"
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
+    CANCELLING = "CANCELLING"
+    UNKNOWN = "UNKNOWN"
     DRAINING = "DRAINING"
     DRAINED = "DRAINED"
+    STOPPED = "STOPPED"
+    RESTARTING = "RESTARTING"
+    UPDATING = "UPDATING"
+    
+    @classmethod
+    def from_status(cls, status: JobStatus) -> 'JobState':
+        """Convert JobStatus to JobState."""
+        try:
+            # First try direct mapping
+            return cls(status.value)
+        except ValueError:
+            # Fall back to known mappings
+            mapping = {
+                JobStatus.COMPLETED: cls.SUCCEEDED,
+                # Add more mappings as needed
+            }
+            return mapping.get(status, cls.UNKNOWN)
 
 class JobType(str, Enum):
     """Type of job execution."""

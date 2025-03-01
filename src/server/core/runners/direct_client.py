@@ -9,7 +9,7 @@ import uuid
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import apache_beam as beam
-from apache_beam.options.pipeline_options import PipelineOptions
+from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions
 from apache_beam.runners.runner import PipelineState
 import importlib.util
 
@@ -48,13 +48,15 @@ class DirectClient(BaseRunnerClient):
         job_id = str(uuid.uuid4())
         
         # Set up pipeline options
-        pipeline_options = {
+        pipeline_options = params.pipeline_options.copy()
+        pipeline_options.update({
             'runner': 'DirectRunner',
-            'direct_num_workers': self.config.get('direct_num_workers', 1),
-            'direct_running_mode': self.config.get('direct_running_mode', 'in_memory'),
-            'save_main_session': True,
-            **params.pipeline_options
-        }
+            'job_name': params.job_name,
+            'direct_num_workers': self.config['pipeline_options'].get('direct_num_workers', 1),
+            'direct_running_mode': self.config['pipeline_options'].get('direct_running_mode', 'in_memory'),
+            'temp_location': self.config['pipeline_options'].get('temp_location', '/tmp/beam-direct'),
+            'save_main_session': True
+        })
         
         try:
             # Import and run the pipeline
@@ -69,7 +71,41 @@ class DirectClient(BaseRunnerClient):
             spec.loader.exec_module(pipeline_module)
             
             # Create and run pipeline
-            pipeline = pipeline_module.create_pipeline(PipelineOptions(pipeline_options))
+            options = PipelineOptions.from_dictionary(pipeline_options)
+            
+            # Configure standard options
+            standard_options = options.view_as(StandardOptions)
+            standard_options.runner = 'DirectRunner'
+            standard_options.streaming = params.job_type == JobType.STREAMING
+            
+            logger.info(f"Configured Direct pipeline options: {options.get_all_options()}")
+            
+            # Create and run the pipeline
+            try:
+                # Try with both parameters if available
+                if hasattr(pipeline_module, 'create_pipeline'):
+                    try:
+                        # Create a namespace for custom options
+                        from argparse import Namespace
+                        custom_options = Namespace()
+                        custom_options.input_file = pipeline_options.get('input_file')
+                        custom_options.output_path = pipeline_options.get('output_path')
+                        
+                        pipeline = pipeline_module.create_pipeline(options, custom_options)
+                    except Exception as e:
+                        logger.info(f"Error creating pipeline with both parameters: {str(e)}")
+                        # Fall back to just options
+                        pipeline = pipeline_module.create_pipeline(options)
+                else:
+                    # No create_pipeline function, try run directly
+                    if hasattr(pipeline_module, 'run'):
+                        pipeline_module.run(options)
+                        raise ValueError("Pipeline module only has 'run' function, not returning Pipeline object")
+                    else:
+                        raise ValueError(f"Pipeline module {params.code_path} does not have create_pipeline or run functions")
+            except Exception as e:
+                logger.error(f"Error creating pipeline: {str(e)}")
+                raise
             
             # Store job info
             result = pipeline.run()

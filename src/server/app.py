@@ -250,26 +250,69 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> FastAPI:
             "description": "Job management operations",
         },
         {
-            "name": "Savepoints",
-            "description": "Job savepoint operations",
-        },
-        {
             "name": "Runners",
-            "description": "Runner operations",
+            "description": "Runner management operations",
         },
         {
             "name": "Metrics",
-            "description": "Job metrics operations",
+            "description": "Metrics retrieval operations",
         },
         {
-            "name": "Health",
-            "description": "Health check operations",
-        },
-        {
-            "name": "Manifest",
-            "description": "MCP tool and resource discovery",
+            "name": "Savepoints",
+            "description": "Savepoint operations",
         }
     ]
+    
+    # Add direct test endpoint for debugging
+    @app.get("/api/v1/debug-test", tags=["Debug"])
+    async def direct_test_endpoint():
+        """Debug endpoint for direct testing."""
+        try:
+            # Get the client manager directly from app state
+            client_manager = app.state.client_manager
+            
+            # Print detailed debugging information
+            print("===== DIRECT DEBUG TEST ENDPOINT =====")
+            print(f"client_manager class: {type(client_manager).__name__}")
+            print(f"client_manager ID: {id(client_manager)}")
+            print(f"config keys: {list(client_manager.config.keys())}")
+            print(f"runners config: {list(client_manager.config['runners'].keys())}")
+            for runner_name, runner_config in client_manager.config['runners'].items():
+                print(f"Runner {runner_name} enabled: {runner_config.get('enabled', False)}")
+            print(f"client keys: {list(client_manager.clients.keys())}")
+            
+            # Call list_runners directly like in test script
+            print("Calling client_manager.list_runners() directly")
+            runners_list = await client_manager.list_runners()
+            
+            # Print results
+            runner_count = len(runners_list.runners)
+            print(f"Found {runner_count} runners")
+            for i, runner in enumerate(runners_list.runners):
+                print(f"Runner {i+1}: {runner.name} (type={runner.runner_type})")
+            
+            return {
+                "success": True,
+                "runner_count": runner_count,
+                "runners": [
+                    {
+                        "name": runner.name,
+                        "type": runner.runner_type.value,
+                        "status": runner.status.value 
+                    }
+                    for runner in runners_list.runners
+                ]
+            }
+        except Exception as e:
+            print(f"ERROR in direct test endpoint: {str(e)}")
+            import traceback
+            traceback_str = traceback.format_exc()
+            print(f"Traceback: {traceback_str}")
+            return {
+                "success": False,
+                "error": str(e),
+                "traceback": traceback_str
+            }
     
     logger.info(f"Initialized Apache Beam MCP Server with default runner: {config.get('default_runner', 'direct') if config else 'direct'}")
     

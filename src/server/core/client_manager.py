@@ -59,13 +59,6 @@ class BeamClientManager:
             else:
                 logger.info(f"  - {runner_name}: None")
         
-        # Manually add Flink runner if it's enabled in config but client failed to initialize
-        if ('flink' in self.config['runners'] and 
-            self.config['runners']['flink'].get('enabled', False) and
-            ('flink' not in self.clients or self.clients['flink'] is None)):
-            logger.info("Flink is enabled in config but client failed to initialize, adding fallback runner")
-            # We'll add the Flink runner entry directly when list_runners is called
-        
         return True
     
     async def cleanup(self):
@@ -77,14 +70,49 @@ class BeamClientManager:
         # Clean up any resources or connections here
         
         # Close any client connections
-        for runner_name, client in self.clients.items():
-            if client and hasattr(client, 'close'):
-                try:
-                    await client.close()
-                    logger.info(f"Closed client for runner: {runner_name}")
-                except Exception as e:
-                    logger.error(f"Error closing client for runner {runner_name}: {str(e)}")
+        clients_count = len(self.clients)
+        logger.info(f"Preparing to close {clients_count} clients")
         
+        for runner_name, client in self.clients.items():
+            logger.info(f"Cleaning up client for runner: {runner_name}")
+            
+            try:
+                if client is None:
+                    logger.info(f"Client for {runner_name} is None, skipping cleanup")
+                    continue
+                    
+                logger.info(f"Client type: {type(client).__name__}")
+                
+                if hasattr(client, 'close'):
+                    logger.info(f"Calling close() on {runner_name} client")
+                    try:
+                        await client.close()
+                        logger.info(f"Successfully closed client for runner: {runner_name}")
+                    except Exception as e:
+                        logger.error(f"Error closing client for runner {runner_name}: {str(e)}")
+                        logger.error(f"Exception type: {type(e).__name__}")
+                        import traceback
+                        logger.error(f"Traceback: {traceback.format_exc()}")
+                elif hasattr(client, '_close_session'):
+                    # Special handling for FlinkClient which has _close_session
+                    logger.info(f"Calling _close_session() on {runner_name} client")
+                    try:
+                        await client._close_session()
+                        logger.info(f"Successfully closed session for runner: {runner_name}")
+                    except Exception as e:
+                        logger.error(f"Error closing session for runner {runner_name}: {str(e)}")
+                        logger.error(f"Exception type: {type(e).__name__}")
+                        import traceback
+                        logger.error(f"Traceback: {traceback.format_exc()}")
+                else:
+                    logger.info(f"No close method found for {runner_name} client")
+            except Exception as e:
+                logger.error(f"Unexpected error during cleanup for {runner_name}: {str(e)}")
+                logger.error(f"Exception type: {type(e).__name__}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        logger.info("BeamClientManager cleanup completed")
         return True
     
     def init_clients(self):
@@ -93,29 +121,16 @@ class BeamClientManager:
             if runner_config.get('enabled', False):
                 logger.info(f"Initializing client for runner: {runner_name}")
                 
-                # Special case for Flink - it's failing to connect so we're adding it directly
-                if runner_name == "flink":
-                    try:
-                        # Use client factory to create client
-                        runner_type = RunnerType(runner_name)
-                        client = ClientFactory.create_client(runner_type, runner_config)
-                        self.clients[runner_name] = client
-                        logger.info(f"Successfully initialized Flink client")
-                    except Exception as e:
-                        logger.error(f"Failed to initialize Flink client properly: {str(e)}")
-                        # Create a special entry for Flink since it's enabled in config
-                        # We'll create a dummy runner entry directly in list_runners
-                        # self.clients[runner_name] = None 
-                else:
-                    try:
-                        # Use client factory to create client
-                        runner_type = RunnerType(runner_name)
-                        client = ClientFactory.create_client(runner_type, runner_config)
-                        self.clients[runner_name] = client
-                    except Exception as e:
-                        logger.error(f"Failed to initialize client for runner {runner_name}: {str(e)}")
-                        # Fall back to using this client manager as the client
-                        self.clients[runner_name] = None
+                try:
+                    # Use client factory to create client
+                    runner_type = RunnerType(runner_name)
+                    client = ClientFactory.create_client(runner_type, runner_config)
+                    self.clients[runner_name] = client
+                    logger.info(f"Successfully initialized client for runner: {runner_name}")
+                except Exception as e:
+                    logger.error(f"Failed to initialize client for runner {runner_name}: {str(e)}")
+                    # Fall back to using this client manager as the client
+                    self.clients[runner_name] = None
     
     def get_client(self, runner_type: RunnerType):
         """
@@ -542,76 +557,192 @@ class BeamClientManager:
     
     async def list_runners(self) -> RunnerList:
         """
-        List available runners
-        
-        Returns:
-            RunnerList: List of available runners
+        Lists available runners based strictly on configuration.
+        Returns a RunnerList containing only enabled runners.
         """
-        runners = []
-        logger.info(f"Listing runners from {len(self.clients)} registered clients")
+        print("DEBUG: Starting list_runners method in client_manager.py")
+        print(f"DEBUG: self object id: {id(self)}")
+        print(f"DEBUG: self.config class: {type(self.config)}")
+        print(f"DEBUG: self.clients class: {type(self.clients)}")
         
-        # List all registered clients
-        client_keys = list(self.clients.keys())
-        logger.info(f"Registered clients: {', '.join(client_keys)}")
+        # Check if another object might be proxying or hiding this method
+        import inspect
+        frame = inspect.currentframe()
+        try:
+            caller_frame = frame.f_back
+            if caller_frame:
+                print(f"DEBUG: Caller file: {caller_frame.f_code.co_filename}")
+                print(f"DEBUG: Caller function: {caller_frame.f_code.co_name}")
+        finally:
+            del frame  # Avoid reference cycles
         
-        # Get runner info from each enabled client
-        for runner_name, client in self.clients.items():
-            # Skip Flink - we'll add it manually below
-            if runner_name == "flink":
-                continue
+        try:
+            from ..models.runner import RunnerList
+            import datetime
             
-            logger.info(f"Processing runner: {runner_name}, client: {client.__class__.__name__ if client else 'None'}")
-            if client is not None:
+            logger.info("Listing runners based on configuration")
+            print(f"DEBUG: Config: {self.config.keys()}")
+            print(f"DEBUG: Runners config: {self.config['runners'].keys()}")
+            now = datetime.datetime.now().isoformat()
+            runners = []
+            
+            # Only process runners that are enabled in config
+            for runner_name, runner_config in self.config['runners'].items():
+                print(f"DEBUG: Processing runner: {runner_name}, enabled={runner_config.get('enabled', False)}")
+                if not runner_config.get('enabled', False):
+                    logger.info(f"Runner {runner_name} is disabled in config, skipping")
+                    continue
+                    
+                logger.info(f"Processing enabled runner: {runner_name}")
+                
+                # Get the client for this runner
+                client = self.clients.get(runner_name)
+                print(f"DEBUG: Client for {runner_name}: {client}")
+                if client is None:
+                    logger.warning(f"No client available for runner {runner_name}, skipping")
+                    continue
+                    
+                # Get runner info from client
                 try:
-                    logger.info(f"Getting runner info for {runner_name}")
-                    runner_info = await client.get_runner_info()
-                    logger.info(f"Successfully got runner info for {runner_name}: {runner_info.name}")
-                    runners.append(runner_info)
+                    if hasattr(client, 'get_runner_info'):
+                        print(f"DEBUG: Calling get_runner_info for {runner_name}")
+                        logger.info(f"Getting runner info for {runner_name} from client")
+                        runner = await client.get_runner_info()
+                        print(f"DEBUG: get_runner_info returned for {runner_name}: {runner}")
+                        if runner:
+                            runners.append(runner)
+                            logger.info(f"Successfully added {runner_name} runner")
+                        else:
+                            logger.warning(f"Client for {runner_name} returned None for runner info")
+                    else:
+                        print(f"DEBUG: Client for {runner_name} doesn't have get_runner_info method")
+                        logger.warning(f"Client for {runner_name} doesn't have get_runner_info method")
                 except Exception as e:
+                    print(f"DEBUG: Error getting runner info for {runner_name}: {str(e)}")
                     logger.error(f"Error getting runner info for {runner_name}: {str(e)}")
-                    logger.error(f"Exception type: {type(e).__name__}")
-                    # Log traceback for better debugging
                     import traceback
-                    logger.error(f"Traceback: {traceback.format_exc()}")
+                    traceback_str = traceback.format_exc()
+                    print(f"DEBUG: Traceback: {traceback_str}")
+                    logger.error(f"Traceback: {traceback_str}")
+                    # Skip this runner if there's an error
+            
+            # Get default runner from config
+            default_runner = self.config.get('default_runner', 'direct')
+            logger.info(f"Default runner is set to: {default_runner}")
+            
+            # Log summary of found runners
+            runner_types = [r.runner_type for r in runners]
+            print(f"DEBUG: Found {len(runners)} enabled runners: {runner_types}")
+            logger.info(f"Found {len(runners)} enabled runners: {runner_types}")
+            
+            # Create the RunnerList
+            print("DEBUG: Creating RunnerList object")
+            runner_list = RunnerList(
+                mcp_resource_id="runners",
+                runners=runners,
+                default_runner=default_runner,
+                mcp_total_runners=len(runners)
+            )
+            
+            print("DEBUG: Returning runner list from list_runners method")
+            return runner_list
+            
+        except Exception as e:
+            print(f"DEBUG: Error in list_runners: {str(e)}")
+            logger.error(f"Error listing runners: {str(e)}")
+            import traceback
+            traceback_str = traceback.format_exc()
+            print(f"DEBUG: Traceback: {traceback_str}")
+            logger.error(f"Traceback: {traceback_str}")
+            raise
+            
+    async def get_runner(self, runner_type: RunnerType) -> Runner:
+        """
+        Get details for a specific runner.
+        
+        Args:
+            runner_type (RunnerType): The type of runner to get details for
+            
+        Returns:
+            Runner: The runner details
+            
+        Raises:
+            Exception: If the runner is not found or not enabled
+        """
+        logger.info(f"Getting details for runner: {runner_type}")
+        
+        # Convert runner_type to string if it's an enum
+        runner_name = runner_type.value if hasattr(runner_type, 'value') else str(runner_type)
+        
+        # Check if runner is enabled in config
+        runner_config = self.config.get('runners', {}).get(runner_name, {})
+        if not runner_config.get('enabled', False):
+            logger.warning(f"Runner {runner_name} is disabled in config")
+            raise ValueError(f"Runner {runner_name} is not enabled")
+        
+        # Get the client for this runner
+        client = self.clients.get(runner_name)
+        if client is None:
+            logger.warning(f"No client available for runner {runner_name}")
+            raise ValueError(f"No client available for runner {runner_name}")
+        
+        # Get runner info from client
+        try:
+            if hasattr(client, 'get_runner_info'):
+                logger.info(f"Getting runner info for {runner_name} from client")
+                runner = await client.get_runner_info()
+                if runner:
+                    logger.info(f"Successfully retrieved runner info for {runner_name}")
+                    return runner
+                else:
+                    logger.warning(f"Client for {runner_name} returned None for runner info")
+                    raise ValueError(f"No runner info available for {runner_name}")
+            else:
+                logger.warning(f"Client for {runner_name} doesn't have get_runner_info method")
+                raise ValueError(f"Cannot get info for runner {runner_name}")
+        except Exception as e:
+            logger.error(f"Error getting runner info for {runner_name}: {str(e)}")
+            raise
+            
+    async def scale_runner(self, runner_type: RunnerType, scale_params: Any) -> Runner:
+        """
+        Scale runner resources
+        
+        Args:
+            runner_type (RunnerType): Type of runner to scale
+            scale_params (Any): Scaling parameters
+            
+        Returns:
+            Runner: Updated runner information
+        """
+        runner_name = runner_type.value
+        logger.info(f"Scaling runner: {runner_type} with params: {scale_params}")
+        
+        # Check if runner is supported and enabled
+        if runner_name not in self.config['runners']:
+            raise ValueError(f"Runner type not supported: {runner_name}")
+        
+        if not self.config['runners'][runner_name].get('enabled', False):
+            raise ValueError(f"Runner type not enabled: {runner_name}")
+        
+        # Get the client
+        client = self.clients.get(runner_name)
+        if not client:
+            raise ValueError(f"Client for {runner_name} is not available")
+        
+        # Debug: Print the client's attribute to check if scale_runner is available
+        import inspect
+        logger.info(f"Client type: {type(client).__name__}")
+        logger.info(f"Client methods: {[name for name, _ in inspect.getmembers(client, predicate=inspect.ismethod)]}")
+        logger.info(f"Has scale_runner attribute: {hasattr(client, 'scale_runner')}")
+        
+        if hasattr(client, 'scale_runner'):
+            logger.info(f"Scaling runner {runner_name} with client")
+            runner = await client.scale_runner(scale_params or {})
+            logger.info(f"Runner scaled: {runner}")
+            return runner
         else:
-            logger.warning(f"No client available for runner: {runner_name}")
-        
-        # Always add Flink if it's enabled in config
-        if 'flink' in self.config['runners'] and self.config['runners']['flink'].get('enabled', False):
-            from ..models.runner import Runner, RunnerType, RunnerStatus, RunnerCapability
-            logger.info("Manually adding Flink runner since it's enabled in config")
-            runners.append(Runner(
-                mcp_resource_id="flink",
-                name="Apache Flink",
-                runner_type=RunnerType.FLINK,
-                status=RunnerStatus.AVAILABLE,
-                description="Apache Flink runner for stream processing",
-                capabilities=[
-                    RunnerCapability.BATCH,
-                    RunnerCapability.STREAMING,
-                    RunnerCapability.SAVEPOINTS,
-                    RunnerCapability.METRICS,
-                    RunnerCapability.LOGGING
-                ],
-                config=self.config['runners'].get('flink', {}),
-                version="1.17.0",  # Fallback version
-                mcp_provider="apache",
-                mcp_min_workers=1,
-                mcp_max_workers=4,
-                mcp_auto_scaling=False
-            ))
-        
-        # Log the available runners
-        logger.info(f"Found {len(runners)} available runners")
-        for runner in runners:
-            logger.info(f"Available runner: {runner.name} ({runner.runner_type})")
-        
-        default_runner = self.config.get('default_runner', 'direct')
-        logger.info(f"Default runner is set to: {default_runner}")
-        
-        return RunnerList(
-            mcp_resource_id="runners",
-            runners=runners,
-            default_runner=default_runner,
-            mcp_total_runners=len(runners)
-        ) 
+            logger.warning(f"Client for {runner_name} doesn't have scale_runner method")
+            # For runners that don't support scaling, just return the current info
+            logger.info(f"Runner {runner_name} does not support scaling, returning current info")
+            return await self.get_runner(runner_type) 

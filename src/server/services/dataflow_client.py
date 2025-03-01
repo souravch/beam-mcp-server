@@ -278,9 +278,14 @@ class DataflowClient:
         """List available runners."""
         try:
             logger.debug("Listing available runners")
-            # Return both Dataflow and Direct runners
-            runners = [
-                Runner(
+            
+            # Create a list for runners
+            runners = []
+            
+            # Check if Direct runner is enabled in settings
+            if getattr(self.settings, 'enable_direct_runner', True):
+                logger.debug("Adding Direct runner to available runners")
+                runners.append(Runner(
                     mcp_resource_id="direct",
                     name="Direct Runner",
                     runner_type=RunnerType.DIRECT,
@@ -295,8 +300,16 @@ class DataflowClient:
                     },
                     version="2.0.0",
                     mcp_provider="apache"
-                ),
-                Runner(
+                ))
+            
+            # Only add Dataflow runner if relevant settings are configured properly
+            if (hasattr(self.settings, 'gcp_project_id') and 
+                self.settings.gcp_project_id and 
+                self.settings.gcp_project_id != "your-gcp-project-id" and
+                getattr(self.settings, 'enable_dataflow_runner', True)):
+                
+                logger.debug("Adding Dataflow runner to available runners")
+                runners.append(Runner(
                     mcp_resource_id="dataflow",
                     name="Google Cloud Dataflow",
                     runner_type=RunnerType.DATAFLOW,
@@ -312,9 +325,9 @@ class DataflowClient:
                     default_region=self.settings.gcp_region,
                     supported_regions=["us-central1", "us-east1", "us-west1", "europe-west1"],
                     mcp_provider="google"
-                )
-            ]
-            logger.debug(f"Found {len(runners)} runners")
+                ))
+            
+            logger.debug(f"Found {len(runners)} runners in DataflowClient.list_runners")
             return runners
         except Exception as e:
             logger.error(f"Error listing runners: {str(e)}", exc_info=True)

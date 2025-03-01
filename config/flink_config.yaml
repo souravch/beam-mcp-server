@@ -32,40 +32,12 @@ runners:
       temp_location: /tmp/beam-direct-temp
       save_main_session: true
 
-  # Adding Spark runner configuration
+  # Disable other runners to simplify debugging
   spark:
-    enabled: false  # Disabled until Spark dependencies are installed
-    spark_master: local[*]  # Use "local[*]" for local testing, or Spark master URL for cluster
-    spark_home: null  # Will be auto-detected if installed
-    app_name: beam-mcp-spark
-    rest_api_port: 4040
-    pipeline_options:
-      spark_job_name: beam-mcp-spark-job
-      spark_executor_instances: 2
-      spark_executor_cores: 2
-      spark_executor_memory: 1g
-      spark_driver_memory: 1g
-      temp_location: /tmp/beam-spark-temp
-      save_main_session: true
-
-  # Adding Dataflow runner configuration for future use (disabled by default)
+    enabled: false
+  
   dataflow:
     enabled: false
-    pipeline_options:
-      project: your-gcp-project-id  # Must be set for Dataflow jobs
-      region: us-central1
-      zone: us-central1-a
-      staging_location: gs://your-bucket/staging
-      temp_location: gs://your-bucket/temp
-      network: default
-      subnetwork: regions/us-central1/subnetworks/default
-      max_workers: 4
-      autoscaling_algorithm: THROUGHPUT_BASED
-      disk_size_gb: 30
-      worker_machine_type: n1-standard-2
-      save_main_session: true
-      experiments: ["use_runner_v2"]
-      service_account_email: null
 
 interfaces:
   jobs:
