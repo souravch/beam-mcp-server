@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: beam-mcp-server
+  labels:
+    app: beam-mcp-server
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: beam-mcp-server
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: beam-mcp-server
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8888"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: beam-mcp-server
+        image: ${REGISTRY}/beam-mcp-server:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8888
+          name: http
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+        env:
+        - name: PORT
+          value: "8888"
+        - name: CONFIG_PATH
+          value: "/app/config/beam_mcp_config.yaml"
+        - name: GCP_PROJECT_ID
+          valueFrom:
+            configMapKeyRef:
+              name: beam-mcp-config
+              key: GCP_PROJECT_ID
+        - name: GCP_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: beam-mcp-config
+              key: GCP_REGION
+        - name: DEFAULT_RUNNER
+          valueFrom:
+            configMapKeyRef:
+              name: beam-mcp-config
+              key: DEFAULT_RUNNER
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: beam-mcp-config
+              key: ENVIRONMENT
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config
+        - name: gcp-credentials
+          mountPath: /root/.config/gcloud
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8888
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8888
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      volumes:
+      - name: config-volume
+        configMap:
+          name: beam-mcp-config
+      - name: gcp-credentials
+        secret:
+          secretName: gcp-credentials
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000 

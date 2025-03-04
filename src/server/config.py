@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     # API configuration
     api_prefix: str = Field(default="/api/v1", description="API prefix for all endpoints")
     cors_origins: list = Field(default=["*"], description="CORS allowed origins")
-    base_url: Optional[str] = Field(default="http://localhost:8080", description="Base URL for API endpoints")
+    base_url: Optional[str] = Field(default="http://localhost:8888", description="Base URL for API endpoints")
     
     # MCP protocol standard configuration
     mcp_version: str = Field(default="1.0", description="MCP protocol version")

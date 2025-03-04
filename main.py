@@ -26,7 +26,7 @@ def parse_args():
     """Parse command-line arguments"""
     parser = argparse.ArgumentParser(description='Apache Beam MCP Server')
     parser.add_argument('-c', '--config', help='Path to config file')
-    parser.add_argument('-p', '--port', type=int, default=8080, help='Port to listen on')
+    parser.add_argument('-p', '--port', type=int, default=8888, help='Port to listen on')
     parser.add_argument('-d', '--debug', action='store_true', help='Enable debug mode')
     parser.add_argument('--host', default='0.0.0.0', help='Host to bind to')
     parser.add_argument('--reload', action='store_true', help='Enable auto-reload for development')

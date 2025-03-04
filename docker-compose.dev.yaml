@@ -1,0 +1,133 @@
+version: '3.8'
+
+services:
+  beam-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./config:/app/config
+      - ~/.config/gcloud:/home/appuser/.config/gcloud:ro  # For Dataflow authentication
+    environment:
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-your-gcp-project}
+      - GCP_REGION=${GCP_REGION:-us-central1}
+      - DEFAULT_RUNNER=${DEFAULT_RUNNER:-direct}
+      - DEBUG=true
+      - ENVIRONMENT=development
+      - RELOAD=true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      - prometheus
+      - grafana
+    networks:
+      - beam-mcp-network
+
+  # Flink JobManager
+  flink-jobmanager:
+    image: apache/flink:1.17.0
+    ports:
+      - "8081:8081"
+    command: jobmanager
+    environment:
+      - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
+    volumes:
+      - ./examples:/opt/flink/examples
+    networks:
+      - beam-mcp-network
+
+  # Flink TaskManager
+  flink-taskmanager:
+    image: apache/flink:1.17.0
+    depends_on:
+      - flink-jobmanager
+    command: taskmanager
+    environment:
+      - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
+      - TASK_MANAGER_NUMBER_OF_TASK_SLOTS=2
+    volumes:
+      - ./examples:/opt/flink/examples
+    networks:
+      - beam-mcp-network
+
+  # Spark Master
+  spark-master:
+    image: bitnami/spark:3.4.1
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    ports:
+      - "8082:8888"
+      - "7077:7077"
+    networks:
+      - beam-mcp-network
+
+  # Spark Worker
+  spark-worker:
+    image: bitnami/spark:3.4.1
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_WORKER_CORES=1
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    depends_on:
+      - spark-master
+    networks:
+      - beam-mcp-network
+
+  # Prometheus for metrics
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    networks:
+      - beam-mcp-network
+
+  # Grafana for dashboards
+  grafana:
+    image: grafana/grafana:10.0.3
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - beam-mcp-network
+
+networks:
+  beam-mcp-network:
+    driver: bridge
+
+volumes:
+  prometheus_data:
+  grafana_data: 

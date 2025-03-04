@@ -1,0 +1,74 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: beam-mcp-network-policy
+  namespace: beam-mcp
+spec:
+  podSelector:
+    matchLabels:
+      app: beam-mcp-server
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    # Allow traffic from the same namespace
+    - namespaceSelector:
+        matchLabels:
+          name: beam-mcp
+    # Allow traffic from ingress controller
+    - namespaceSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8888
+  egress:
+  # Allow DNS resolution
+  - to:
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow outbound connections to Flink
+  - to:
+    - podSelector:
+        matchLabels:
+          app: flink-jobmanager
+    ports:
+    - protocol: TCP
+      port: 8081
+  # Allow outbound connections to Spark
+  - to:
+    - podSelector:
+        matchLabels:
+          app: spark-master
+    ports:
+    - protocol: TCP
+      port: 7077
+    - protocol: TCP
+      port: 8888
+  # Allow outbound connections to Prometheus
+  - to:
+    - podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 9090
+  # Allow outbound connections to Google APIs (for Dataflow)
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+    ports:
+    - protocol: TCP
+      port: 443 

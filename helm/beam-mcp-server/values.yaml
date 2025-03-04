@@ -1,0 +1,252 @@
+# Default values for beam-mcp-server.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/yourusername/beam-mcp-server
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8888"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8888
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: beam-mcp.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: beam-mcp-tls
+      hosts:
+        - beam-mcp.example.com
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+      - type: Pods
+        value: 4
+        periodSeconds: 60
+      selectPolicy: Max
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - beam-mcp-server
+        topologyKey: kubernetes.io/hostname
+
+# Beam MCP Server Configuration
+beamMcp:
+  config:
+    server:
+      name: "Apache Beam MCP Server"
+      version: "1.0.0"
+      debug: false
+      log_level: "INFO"
+      base_url: "/api/v1"
+    mcp:
+      version: "1.0"
+      log_level: "INFO"
+    runners:
+      default: "dataflow"
+      enabled:
+        - direct
+        - dataflow
+        - flink
+        - spark
+    dataflow:
+      project_id: "${GCP_PROJECT_ID}"
+      region: "${GCP_REGION}"
+      temp_location: "gs://${GCP_BUCKET}/temp"
+      staging_location: "gs://${GCP_BUCKET}/staging"
+    flink:
+      job_manager_url: "http://flink-jobmanager:8081"
+      parallelism: 4
+    spark:
+      master_url: "spark://spark-master:7077"
+      deploy_mode: "cluster"
+    monitoring:
+      prometheus_enabled: true
+      opentelemetry_enabled: true
+  
+  env:
+    - name: PORT
+      value: "8888"
+    - name: CONFIG_PATH
+      value: "/app/config/beam_mcp_config.yaml"
+    - name: GCP_PROJECT_ID
+      value: "your-gcp-project"
+    - name: GCP_REGION
+      value: "us-central1"
+    - name: GCP_BUCKET
+      value: "your-gcp-bucket"
+    - name: DEFAULT_RUNNER
+      value: "dataflow"
+    - name: ENVIRONMENT
+      value: "production"
+    - name: PYTHONUNBUFFERED
+      value: "1"
+    - name: PYTHONDONTWRITEBYTECODE
+      value: "1"
+
+# Prometheus configuration
+prometheus:
+  enabled: true
+  server:
+    persistentVolume:
+      enabled: true
+      size: 10Gi
+
+# Grafana configuration
+grafana:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 5Gi
+  adminPassword: admin
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://{{ .Release.Name }}-prometheus-server
+          access: proxy
+          isDefault: true
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: 'default'
+          orgId: 1
+          folder: 'Beam MCP'
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/default
+  dashboardsConfigMaps:
+    default: "{{ .Release.Name }}-grafana-dashboards"
+
+# Flink configuration (optional)
+flink:
+  enabled: false
+  jobManager:
+    replicas: 1
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+      requests:
+        cpu: 500m
+        memory: 512Mi
+  taskManager:
+    replicas: 2
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+
+# Spark configuration (optional)
+spark:
+  enabled: false
+  master:
+    replicas: 1
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+      requests:
+        cpu: 500m
+        memory: 512Mi
+  worker:
+    replicas: 2
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+      requests:
+        cpu: 1000m
+        memory: 2Gi 

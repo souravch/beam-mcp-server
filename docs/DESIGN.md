@@ -614,7 +614,7 @@ from beam_mcp_client import BeamMCPClient, MCPContext
 
 # Initialize client with session
 client = BeamMCPClient(
-    base_url="http://localhost:8080",
+    base_url="http://localhost:8888",
     session_id="example-session",
     user_id="example-user"
 )
@@ -653,7 +653,7 @@ metrics = await client.get_metrics(job["job_id"])
 #### List Runners
 
 ```bash
-curl http://localhost:8080/api/v1/runners \
+curl http://localhost:8888/api/v1/runners \
   -H "MCP-Session-ID: my-session" \
   -H "Content-Type: application/json"
 ```
@@ -661,7 +661,7 @@ curl http://localhost:8080/api/v1/runners \
 #### Create Job
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/jobs \
+curl -X POST http://localhost:8888/api/v1/jobs \
   -H "Content-Type: application/json" \
   -H "MCP-Session-ID: my-session" \
   -H "MCP-Transaction-ID: my-transaction" \
@@ -738,7 +738,7 @@ The server returns standardized error responses:
 Monitor server health with the LLM-friendly endpoint:
 
 ```bash
-curl http://localhost:8080/api/v1/health/llm
+curl http://localhost:8888/api/v1/health/llm
 ```
 
 ## Development Roadmap

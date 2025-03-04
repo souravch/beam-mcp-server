@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - configmap.yaml
+  - ingress.yaml
+  - hpa.yaml
+
+commonLabels:
+  app.kubernetes.io/name: beam-mcp-server
+  app.kubernetes.io/part-of: beam-mcp
+  app.kubernetes.io/managed-by: kustomize
+
+namespace: beam-mcp
+
+configMapGenerator:
+  - name: beam-mcp-config
+    behavior: merge
+    literals:
+      - GCP_PROJECT_ID=your-gcp-project
+      - GCP_REGION=us-central1
+      - GCP_BUCKET=your-gcp-bucket
+      - DEFAULT_RUNNER=dataflow
+      - ENVIRONMENT=production
+
+images:
+  - name: ${REGISTRY}/beam-mcp-server
+    newName: ${REGISTRY}/beam-mcp-server
+    newTag: latest
+
+vars:
+  - name: REGISTRY
+    objref:
+      kind: ConfigMap
+      name: beam-mcp-config
+      apiVersion: v1
+    fieldref:
+      fieldpath: data.REGISTRY 

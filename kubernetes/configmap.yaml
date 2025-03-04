@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beam-mcp-config
+data:
+  beam_mcp_config.yaml: |
+    server:
+      name: "Apache Beam MCP Server"
+      version: "1.0.0"
+      debug: false
+      log_level: "INFO"
+      base_url: "/api/v1"
+      
+    mcp:
+      version: "1.0"
+      log_level: "INFO"
+      
+    runners:
+      default: "dataflow"
+      enabled:
+        - direct
+        - dataflow
+        - flink
+        - spark
+      
+    dataflow:
+      project_id: "${GCP_PROJECT_ID}"
+      region: "${GCP_REGION}"
+      temp_location: "gs://${GCP_BUCKET}/temp"
+      staging_location: "gs://${GCP_BUCKET}/staging"
+      
+    flink:
+      job_manager_url: "http://flink-jobmanager:8081"
+      parallelism: 4
+      
+    spark:
+      master_url: "spark://spark-master:7077"
+      deploy_mode: "cluster"
+      
+    monitoring:
+      prometheus_enabled: true
+      opentelemetry_enabled: true
+      
+  GCP_PROJECT_ID: "your-gcp-project"
+  GCP_REGION: "us-central1"
+  GCP_BUCKET: "your-gcp-bucket"
+  DEFAULT_RUNNER: "dataflow"
+  ENVIRONMENT: "production" 

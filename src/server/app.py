@@ -176,7 +176,7 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> FastAPI:
         api = yaml_config['api']
         flat_config['api_prefix'] = api.get('prefix', '/api/v1')
         flat_config['cors_origins'] = api.get('cors_origins', ['*'])
-        flat_config['base_url'] = api.get('base_url', 'http://localhost:8080')
+        flat_config['base_url'] = api.get('base_url', 'http://localhost:8888')
     
     # Create settings from flattened config
     settings = Settings(**flat_config)
