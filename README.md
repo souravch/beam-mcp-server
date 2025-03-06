@@ -45,7 +45,7 @@ pip install -r requirements.txt
 
 ```bash
 # With the Direct runner (no external dependencies)
-python main.py --debug --port 8082
+python main.py --debug --port 8888
 
 # With Flink runner (if you have Flink installed)
 CONFIG_PATH=config/flink_config.yaml python main.py --debug --port 8082
@@ -58,7 +58,7 @@ CONFIG_PATH=config/flink_config.yaml python main.py --debug --port 8082
 echo "This is a test file for Apache Beam WordCount example" > /tmp/input.txt
 
 # Submit a job using curl
-curl -X POST http://localhost:8082/api/v1/jobs \
+curl -X POST http://localhost:8888/api/v1/jobs \
   -H "Content-Type: application/json" \
   -d '{
     "job_name": "test-wordcount",
@@ -165,7 +165,7 @@ job = requests.post(
 
 # Monitor job status
 job_id = job["data"]["job_id"]
-status = requests.get(f"http://localhost:8082/api/v1/jobs/{job_id}", headers=headers).json()
+status = requests.get(f"http://localhost:8888/api/v1/jobs/{job_id}", headers=headers).json()
 ```
 
 ## CI/CD Pipeline
