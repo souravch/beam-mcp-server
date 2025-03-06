@@ -5,10 +5,13 @@ This module defines shared data models used across the application.
 """
 
 from enum import Enum
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, TypeVar, Generic
 from datetime import datetime
 from pydantic import BaseModel, Field
 from mcp.types import Request, Result, RequestParams
+
+# Define a type variable for generic typing
+T = TypeVar('T')
 
 class RunnerType(str, Enum):
     """Type of runner for executing Apache Beam pipelines."""
@@ -53,10 +56,10 @@ class MetricValue(BaseModel):
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat(), description="Timestamp when the metric was collected")
     labels: Optional[Dict[str, str]] = Field(None, description="Additional labels for the metric")
 
-class LLMToolResponse(BaseModel):
+class LLMToolResponse(BaseModel, Generic[T]):
     """Standard response format for LLM tools."""
     success: bool = Field(..., description="Whether the operation was successful")
-    data: Any = Field(..., description="Response data")
+    data: T = Field(..., description="Response data")
     message: str = Field(..., description="Human-readable message")
     error: Optional[str] = Field(None, description="Error message if any")
     

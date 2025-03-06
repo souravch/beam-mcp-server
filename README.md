@@ -124,11 +124,73 @@ helm install beam-mcp ./helm/beam-mcp-server \
 
 For detailed deployment instructions, see the [Kubernetes Deployment Guide](docs/kubernetes_deployment.md).
 
+## MCP Standard Endpoints
+
+The Beam MCP Server implements all standard Model Context Protocol (MCP) endpoints, providing a comprehensive framework for AI-managed data pipelines:
+
+### `/tools` Endpoint
+
+Manage AI agents and models for pipeline processing:
+
+```bash
+# Register a sentiment analysis tool
+curl -X POST "http://localhost:8888/api/v1/tools/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "sentiment-analyzer",
+    "description": "Analyzes sentiment in text data",
+    "type": "transformation",
+    "parameters": {
+      "text_column": {
+        "type": "string",
+        "description": "Column containing text to analyze"
+      }
+    }
+  }'
+```
+
+### `/resources` Endpoint
+
+Manage datasets and other pipeline resources:
+
+```bash
+# Register a dataset
+curl -X POST "http://localhost:8888/api/v1/resources/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Customer Transactions",
+    "description": "Daily customer transaction data",
+    "resource_type": "dataset",
+    "location": "gs://analytics-data/transactions/*.csv"
+  }'
+```
+
+### `/contexts` Endpoint
+
+Define execution environments for pipelines:
+
+```bash
+# Create a Dataflow execution context
+curl -X POST "http://localhost:8888/api/v1/contexts/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Dataflow Prod",
+    "description": "Production Dataflow environment",
+    "context_type": "dataflow",
+    "parameters": {
+      "region": "us-central1",
+      "project": "beam-analytics-prod"
+    }
+  }'
+```
+
+These MCP standard endpoints integrate seamlessly with Beam's core functionality to provide a complete solution for managing data pipelines. For detailed examples and use cases, see the [MCP Compliance & Examples](docs/mcp-compliance.md).
+
 ## Documentation
 
 - [Developer Quickstart](docs/QUICKSTART.md) - Get set up for development
 - [System Design](docs/DESIGN.md) - Architecture and implementation details
-- [MCP Compliance](docs/mcp-compliance.md) - MCP protocol implementation
+- [MCP Compliance & Examples](docs/mcp-compliance.md) - MCP protocol implementation with real-world examples
 - [LLM Integration](docs/llm_integration.md) - AI/LLM integration guide
 - [Kubernetes Deployment](docs/kubernetes_deployment.md) - Kubernetes deployment guide
 - [Cloud Optimization](docs/cloud_optimization.md) - Cloud environment optimization guide

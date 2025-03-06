@@ -26,6 +26,12 @@ from .api.runners_router import router as runners_router
 from .api.metrics_router import router as metrics_router
 from .api.savepoints_router import router as savepoints_router
 from .api.health_router import router as health_router
+from .api.tools_router import router as tools_router
+from .api.resources_router import router as resources_router
+from .api.contexts_router import router as contexts_router
+from .core.tool_registry import ToolRegistry
+from .core.resource_registry import ResourceRegistry
+from .core.context_registry import ContextRegistry
 
 # Setup logging
 logging.basicConfig(
@@ -198,10 +204,22 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> FastAPI:
     # Initialize client manager with the full YAML config
     client_manager = BeamClientManager(yaml_config)
     
+    # Initialize tool registry
+    tool_registry = ToolRegistry()
+    
+    # Initialize resource registry
+    resource_registry = ResourceRegistry()
+    
+    # Initialize context registry
+    context_registry = ContextRegistry()
+    
     # Store client manager and config in app state
     app.state.client_manager = client_manager
     app.state.config = yaml_config
     app.state.mcp_server = mcp_server
+    app.state.tool_registry = tool_registry
+    app.state.resource_registry = resource_registry
+    app.state.context_registry = context_registry
     
     # Add routers
     app.include_router(manifest_router, prefix="/api/v1", tags=["manifest"])
@@ -210,6 +228,9 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> FastAPI:
     app.include_router(metrics_router, prefix="/api/v1/metrics", tags=["metrics"])
     app.include_router(savepoints_router, prefix="/api/v1/savepoints", tags=["savepoints"])
     app.include_router(health_router, prefix="/api/v1/health", tags=["health"])
+    app.include_router(tools_router, prefix="/api/v1/tools", tags=["tools"])
+    app.include_router(resources_router, prefix="/api/v1/resources", tags=["resources"])
+    app.include_router(contexts_router, prefix="/api/v1/contexts", tags=["contexts"])
     
     # Configure CORS
     app.add_middleware(
@@ -260,6 +281,10 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> FastAPI:
         {
             "name": "Savepoints",
             "description": "Savepoint operations",
+        },
+        {
+            "name": "Contexts",
+            "description": "Context management operations",
         }
     ]
     
