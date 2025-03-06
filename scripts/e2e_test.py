@@ -11,7 +11,7 @@ This script performs comprehensive testing of the MCP server:
 6. Cleans up when done
 
 Usage:
-    python scripts/e2e_test.py --config config/flink_config.yaml --port 8082
+    python scripts/e2e_test.py --config config/flink_config.yaml --port 8888
 """
 
 import argparse
@@ -579,7 +579,7 @@ def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='End-to-end test for Apache Beam MCP Server')
     parser.add_argument('--config', default='config/flink_config.yaml', help='Path to server configuration file')
-    parser.add_argument('--port', type=int, default=8082, help='Port to run the server on')
+    parser.add_argument('--port', type=int, default=8888, help='Port to run the server on')
     
     return parser.parse_args()
 

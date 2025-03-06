@@ -75,11 +75,11 @@ python -m pytest tests/test_runners.py
 ### Running the Server
 
 ```bash
-# Run with default configuration (Direct runner)
-python main.py --debug --port 8082
+# Simplified local development run
+python main.py --debug --port 8888
 
-# Run with Flink configuration
-CONFIG_PATH=config/flink_config.yaml python main.py --debug --port 8082
+# With explicit config file path
+CONFIG_PATH=config/flink_config.yaml python main.py --debug --port 8888
 ```
 
 ## Making Contributions

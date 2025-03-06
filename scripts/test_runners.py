@@ -227,8 +227,10 @@ class RunnerTest:
 
 def parse_args():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description='Test MCP server with different runners')
-    parser.add_argument('--server', default='http://localhost:8082', help='MCP server URL')
+    parser = argparse.ArgumentParser(description='Test MCP runners')
+    parser.add_argument('--server', default='http://localhost:8888', help='MCP server URL')
+    parser.add_argument('--runner', default='direct', choices=['direct', 'flink', 'spark', 'dataflow'], 
+                      help='Runner to test')
     parser.add_argument('--config', help='Path to runner configuration file')
     
     args = parser.parse_args()

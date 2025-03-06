@@ -29,67 +29,64 @@ This guide helps you set up the Apache Beam MCP Server for development and shows
    pip install -r requirements.txt
    ```
 
-## Running the Server
+## Starting the Server
 
-Start the server with the Direct runner (no external dependencies):
-
-```bash
-python main.py --debug --port 8082
-```
-
-Or with Flink runner (if you have Flink installed):
+Run the server with the following command:
 
 ```bash
-CONFIG_PATH=config/flink_config.yaml python main.py --debug --port 8082
+# Run with default configuration (Direct runner)
+python main.py --debug --port 8888
+
+# Or with Flink configuration
+CONFIG_PATH=config/flink_config.yaml python main.py --debug --port 8888
 ```
 
-## Testing Your Setup
-
-### Health Check
+The server will start and listen on port 8888. You can confirm it's running by checking the health endpoint:
 
 ```bash
-curl http://localhost:8082/api/v1/health/health
+curl http://localhost:8888/api/v1/health/health
 ```
 
-Response should be:
-```json
-{"status":"healthy","timestamp":"2025-03-01T12:34:56.789Z","version":"1.0.0"}
-```
+You should see a response indicating the server is healthy.
 
-### List Available Runners
+## Using the API
+
+### Listing Available Runners
+
+To list available runners:
 
 ```bash
-curl http://localhost:8082/api/v1/runners
+curl http://localhost:8888/api/v1/runners
 ```
 
-### Run an Example Job
+### Creating a Job
 
-1. **Create a test input file**
-   ```bash
-   echo "This is a test file for Apache Beam WordCount example" > /tmp/input.txt
-   ```
+To create a new job:
 
-2. **Submit a WordCount job**
-   ```bash
-   curl -X POST http://localhost:8082/api/v1/jobs \
-     -H "Content-Type: application/json" \
-     -d '{
-       "job_name": "test-wordcount",
-       "runner_type": "direct",
-       "job_type": "BATCH",
-       "code_path": "examples/pipelines/wordcount.py",
-       "pipeline_options": {
-         "input_file": "/tmp/input.txt",
-         "output_path": "/tmp/output"
-       }
-     }'
-   ```
+```bash
+curl -X POST http://localhost:8888/api/v1/jobs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "pipeline": "wordcount.py",
+    "runner": "direct",
+    "options": {
+      "input": "gs://dataflow-samples/shakespeare/kinglear.txt",
+      "output": "/tmp/wordcount-output"
+    }
+  }'
+```
 
-3. **Check job status**
-   ```bash
-   # Replace JOB_ID with the job_id from the previous response
-   curl http://localhost:8082/api/v1/jobs/JOB_ID
-   ```
+This will return a job ID that you can use to track the job's progress.
+
+### Monitoring a Job
+
+To get the status of a job:
+
+```bash
+curl http://localhost:8888/api/v1/jobs/JOB_ID
+```
+
+Replace `JOB_ID` with the ID returned when you created the job.
 
 ## Development Workflow
 

@@ -48,13 +48,13 @@ Test the server's MCP compliance with these simple commands:
 
 ```bash
 # Check the manifest endpoint
-curl http://localhost:8082/api/v1/manifest
+curl http://localhost:8888/api/v1/manifest
 
 # Check health endpoint
-curl http://localhost:8082/api/v1/health/health
+curl http://localhost:8888/api/v1/health/health
 
 # Test context propagation
-curl http://localhost:8082/api/v1/runners \
+curl http://localhost:8888/api/v1/runners \
   -H "MCP-Session-ID: test-session-123"
 ```
 
@@ -64,13 +64,13 @@ When building clients to work with the MCP server:
 
 1. **Start with the manifest**: Always fetch the manifest to discover available tools
    ```python
-   manifest = requests.get("http://localhost:8082/api/v1/manifest").json()
+   manifest = requests.get("http://localhost:8888/api/v1/manifest").json()
    ```
 
 2. **Maintain context**: Pass the same session ID across requests
    ```python
    headers = {"MCP-Session-ID": "my-session-id"}
-   response = requests.get("http://localhost:8082/api/v1/runners", headers=headers)
+   response = requests.get("http://localhost:8888/api/v1/runners", headers=headers)
    ```
 
 3. **Handle errors properly**: Always check the `success` field
@@ -303,4 +303,36 @@ The examples above demonstrate how the MCP endpoints provide real value:
 
 6. **Automation Friendly**: These standardized endpoints make it easy to automate pipeline deployment through CI/CD systems or to create higher-level orchestration tools.
 
-For a complete implementation reference, see the API router files in the `src/server/api/` directory. 
+For a complete implementation reference, see the API router files in the `src/server/api/` directory.
+
+### Basic API Interaction
+
+Access key MCP endpoints to test server functionality:
+
+```bash
+# Get server manifest
+curl http://localhost:8888/api/v1/manifest
+
+# Check server health
+curl http://localhost:8888/api/v1/health/health
+
+# List available runners
+curl http://localhost:8888/api/v1/runners \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${API_TOKEN}"
+```
+
+### Programmatic Access Example
+
+```python
+import requests
+
+# Fetch the server manifest to verify MCP compliance
+manifest = requests.get("http://localhost:8888/api/v1/manifest").json()
+
+# Set up authentication
+headers = {"Authorization": f"Bearer {api_token}"}
+
+# Access a protected endpoint
+response = requests.get("http://localhost:8888/api/v1/runners", headers=headers)
+``` 

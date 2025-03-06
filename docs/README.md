@@ -22,12 +22,12 @@ To get started with the Apache Beam MCP Server:
 
 2. **Start the server**
    ```bash
-   python main.py --port 8082 --config config/flink_config.yaml
+   python main.py --port 8888 --config config/flink_config.yaml
    ```
 
 3. **Verify it's running**
    ```bash
-   curl http://localhost:8082/api/v1/health/health
+   curl http://localhost:8888/api/v1/health/health
    ```
 
 ## Key Features

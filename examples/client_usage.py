@@ -237,7 +237,7 @@ async def main(args):
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='Apache Beam MCP Client Example')
-    parser.add_argument('--server', default='http://localhost:8082', help='MCP server URL')
+    parser.add_argument('--server', default='http://localhost:8888', help='MCP server URL')
     parser.add_argument('--runner', default='direct', choices=['direct', 'flink', 'spark'], 
                         help='Runner to use')
     parser.add_argument('--timeout', type=int, default=60, help='Monitoring timeout in seconds')

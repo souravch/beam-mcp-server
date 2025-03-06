@@ -48,7 +48,7 @@ pip install -r requirements.txt
 python main.py --debug --port 8888
 
 # With Flink runner (if you have Flink installed)
-CONFIG_PATH=config/flink_config.yaml python main.py --debug --port 8082
+CONFIG_PATH=config/flink_config.yaml python main.py --debug --port 8888
 ```
 
 ### Run Your First Job
