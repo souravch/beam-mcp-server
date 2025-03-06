@@ -206,11 +206,11 @@ import requests
 
 # Get available runners
 headers = {"MCP-Session-ID": "my-session-123"}
-runners = requests.get("http://localhost:8082/api/v1/runners", headers=headers).json()
+runners = requests.get("http://localhost:8888/api/v1/runners", headers=headers).json()
 
 # Create a job
 job = requests.post(
-    "http://localhost:8082/api/v1/jobs",
+    "http://localhost:8888/api/v1/jobs",
     headers=headers,
     json={
         "job_name": "wordcount-example",

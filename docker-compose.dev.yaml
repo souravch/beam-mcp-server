@@ -67,7 +67,7 @@ services:
       - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
       - SPARK_SSL_ENABLED=no
     ports:
-      - "8082:8888"
+      - "8080:8080"
       - "7077:7077"
     networks:
       - beam-mcp-network
@@ -123,6 +123,25 @@ services:
       - prometheus
     networks:
       - beam-mcp-network
+
+  beam-mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./config:/app/config
+      - ./examples:/app/examples
+    ports:
+      - "8888:8888"
+    environment:
+      - CONFIG_PATH=/app/config/flink_config.yaml
+      - DEBUG=true
+      - LOG_LEVEL=info
+    depends_on:
+      - flink-jobmanager
+      - flink-taskmanager
+      - spark-master
+      - spark-worker
 
 networks:
   beam-mcp-network:

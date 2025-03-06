@@ -16,10 +16,10 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-# Set up environment
-MCP_SERVER_PORT=8082
-MCP_SERVER_URL="http://localhost:$MCP_SERVER_PORT"
-CONFIG_PATH="config/flink_config.yaml"
+# Configuration
+MCP_SERVER_HOST="localhost"
+MCP_SERVER_PORT=8888
+CONFIG_PATH="config/all_runners.yaml"
 
 # Check if Flink is installed
 echo "Checking Flink installation..."

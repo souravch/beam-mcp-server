@@ -14,8 +14,9 @@ echo "========================================================"
 
 # Default values
 CONFIG_PATH="config/flink_config.yaml"
-SERVER_PORT=8082
+SERVER_PORT=8888
 SKIP_FLINK_CHECK=false
+WAIT_TIME=5
 
 # Parse command line arguments
 while [[ "$#" -gt 0 ]]; do
