@@ -72,7 +72,7 @@ Example error response:
 }
 """
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Callable
 
 from fastapi import APIRouter, Depends, Path, Query, status
 from pydantic import ValidationError
@@ -81,6 +81,29 @@ from ..core.resource_registry import ResourceRegistry
 from ..models.resources import Resource, ResourceDefinition, ResourceType, ResourceStatus
 from ..models.common import LLMToolResponse
 from .dependencies import get_resource_registry
+
+# Import authentication dependencies if available
+try:
+    from ..auth import require_read, require_write
+except ImportError:
+    # Create dummy auth functions for backward compatibility
+    from fastapi import Depends
+    
+    # Create a dummy UserSession for type hints
+    class UserSession:
+        user_id: str = "anonymous"
+        roles: list = ["admin"]
+    
+    # Create a dummy dependency that just returns a default user
+    async def get_dummy_user():
+        return UserSession()
+    
+    # Create dummy auth dependencies
+    def require_read(func: Callable = None):
+        return get_dummy_user
+        
+    def require_write(func: Callable = None):
+        return get_dummy_user
 
 # Define a dummy resource for error responses
 DUMMY_RESOURCE = Resource(
@@ -102,7 +125,8 @@ logger = logging.getLogger(__name__)
 async def list_resources(
     resource_type: Optional[ResourceType] = Query(None, description="Filter resources by type"),
     status: Optional[ResourceStatus] = Query(None, description="Filter resources by status"),
-    resource_registry: ResourceRegistry = Depends(get_resource_registry)
+    resource_registry: ResourceRegistry = Depends(get_resource_registry),
+    user = Depends(require_read)
 ) -> LLMToolResponse[List[Resource]]:
     """
     List all available resources with optional filtering by type and status.
@@ -111,6 +135,7 @@ async def list_resources(
         resource_type: Optional filter by resource type
         status: Optional filter by resource status
         resource_registry: Resource registry dependency
+        user: Authentication user dependency
         
     Returns:
         LLMToolResponse containing a list of resources
@@ -133,7 +158,8 @@ async def list_resources(
 @router.get("/{resource_id}", response_model=LLMToolResponse[Resource], response_model_exclude_unset=True, response_model_exclude_none=True)
 async def get_resource(
     resource_id: str = Path(..., description="The ID of the resource to retrieve"),
-    resource_registry: ResourceRegistry = Depends(get_resource_registry)
+    resource_registry: ResourceRegistry = Depends(get_resource_registry),
+    user = Depends(require_read)
 ) -> LLMToolResponse[Resource]:
     """
     Get a specific resource by ID.
@@ -141,6 +167,7 @@ async def get_resource(
     Args:
         resource_id: The ID of the resource to retrieve
         resource_registry: Resource registry dependency
+        user: Authentication user dependency
         
     Returns:
         LLMToolResponse containing the resource details
@@ -170,7 +197,8 @@ async def get_resource(
 @router.post("/", response_model=LLMToolResponse[Resource], response_model_exclude_unset=True, response_model_exclude_none=True, status_code=status.HTTP_201_CREATED)
 async def create_resource(
     resource_definition: ResourceDefinition,
-    resource_registry: ResourceRegistry = Depends(get_resource_registry)
+    resource_registry: ResourceRegistry = Depends(get_resource_registry),
+    user = Depends(require_write)
 ) -> LLMToolResponse[Resource]:
     """
     Create a new resource with the provided definition.
@@ -178,6 +206,7 @@ async def create_resource(
     Args:
         resource_definition: The definition for the new resource
         resource_registry: Resource registry dependency
+        user: Authentication user dependency
         
     Returns:
         LLMToolResponse containing the created resource
@@ -215,7 +244,8 @@ async def create_resource(
 async def update_resource(
     resource_id: str = Path(..., description="The ID of the resource to update"),
     updates: Dict[str, Any] = None,
-    resource_registry: ResourceRegistry = Depends(get_resource_registry)
+    resource_registry: ResourceRegistry = Depends(get_resource_registry),
+    user = Depends(require_write)
 ) -> LLMToolResponse[Resource]:
     """
     Update an existing resource by ID.
@@ -224,6 +254,7 @@ async def update_resource(
         resource_id: The ID of the resource to update
         updates: The updates to apply to the resource
         resource_registry: Resource registry dependency
+        user: Authentication user dependency
         
     Returns:
         LLMToolResponse containing the updated resource
@@ -267,7 +298,8 @@ async def update_resource(
 @router.delete("/{resource_id}", response_model=LLMToolResponse[Resource], response_model_exclude_unset=True, response_model_exclude_none=True)
 async def delete_resource(
     resource_id: str = Path(..., description="The ID of the resource to delete"),
-    resource_registry: ResourceRegistry = Depends(get_resource_registry)
+    resource_registry: ResourceRegistry = Depends(get_resource_registry),
+    user = Depends(require_write)
 ) -> LLMToolResponse[Resource]:
     """
     Delete a resource by ID.
@@ -275,6 +307,7 @@ async def delete_resource(
     Args:
         resource_id: The ID of the resource to delete
         resource_registry: Resource registry dependency
+        user: Authentication user dependency
         
     Returns:
         LLMToolResponse with deletion confirmation

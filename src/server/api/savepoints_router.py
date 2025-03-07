@@ -14,6 +14,29 @@ from ..models import (
 )
 from ..core import BeamClientManager
 
+# Import authentication dependencies if available
+try:
+    from ..auth import require_read, require_write
+except ImportError:
+    # Create dummy auth functions for backward compatibility
+    from typing import Callable
+    
+    # Create a dummy UserSession for type hints
+    class UserSession:
+        user_id: str = "anonymous"
+        roles: list = ["admin"]
+    
+    # Create a dummy dependency that just returns a default user
+    async def get_dummy_user():
+        return UserSession()
+    
+    # Create dummy auth dependencies
+    def require_read(func: Callable = None):
+        return get_dummy_user
+        
+    def require_write(func: Callable = None):
+        return get_dummy_user
+
 logger = logging.getLogger(__name__)
 
 # Create router
@@ -30,7 +53,8 @@ async def create_savepoint(
     job_id: str = Path(..., description="Job ID to create savepoint for"),
     savepoint_params: Optional[SavepointParameters] = None,
     background_tasks: BackgroundTasks = None,
-    client_manager: BeamClientManager = Depends(get_client_manager)
+    client_manager: BeamClientManager = Depends(get_client_manager),
+    user = Depends(require_write)
 ):
     """
     Create a savepoint for a streaming job.
@@ -82,7 +106,8 @@ async def create_savepoint(
 @router.get("/jobs/{job_id}/savepoints", response_model=LLMToolResponse, summary="List savepoints")
 async def list_savepoints(
     job_id: str = Path(..., description="Job ID to list savepoints for"),
-    client_manager: BeamClientManager = Depends(get_client_manager)
+    client_manager: BeamClientManager = Depends(get_client_manager),
+    user = Depends(require_read)
 ):
     """
     List all savepoints for a specific job.
@@ -127,7 +152,8 @@ async def list_savepoints(
 async def restore_from_savepoint(
     job_id: str = Path(..., description="Job ID to restore"),
     savepoint_id: str = Path(..., description="Savepoint ID to restore from"),
-    client_manager: BeamClientManager = Depends(get_client_manager)
+    client_manager: BeamClientManager = Depends(get_client_manager),
+    user = Depends(require_write)
 ):
     """
     Restore a job from a savepoint.

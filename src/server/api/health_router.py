@@ -13,6 +13,29 @@ from typing import Dict, Any, Optional
 
 from ..models import HealthResponse, LLMToolResponse, MCPContext
 
+# Import authentication dependencies if available
+try:
+    from ..auth import require_read, require_write
+except ImportError:
+    # Create dummy auth functions for backward compatibility
+    from typing import Callable
+    
+    # Create a dummy UserSession for type hints
+    class UserSession:
+        user_id: str = "anonymous"
+        roles: list = ["admin"]
+    
+    # Create a dummy dependency that just returns a default user
+    async def get_dummy_user():
+        return UserSession()
+    
+    # Create dummy auth dependencies
+    def require_read(func: Callable = None):
+        return get_dummy_user
+        
+    def require_write(func: Callable = None):
+        return get_dummy_user
+
 logger = logging.getLogger(__name__)
 
 # Create router
@@ -45,7 +68,7 @@ async def get_optional_mcp_context(request: Request) -> Optional[MCPContext]:
     return context
 
 @router.get("/health", response_model=HealthResponse, tags=["Health"], summary="Check server health")
-async def health_check():
+async def health_check(user = Depends(require_read)):
     """
     Health check endpoint to verify server status.
     
@@ -75,7 +98,11 @@ async def health_check():
         }
 
 @router.get("/health/llm", response_model=LLMToolResponse, tags=["Health"], summary="LLM-friendly health check")
-async def llm_health_check(request: Request, context: Optional[MCPContext] = Depends(get_optional_mcp_context)):
+async def llm_health_check(
+    request: Request, 
+    context: Optional[MCPContext] = Depends(get_optional_mcp_context),
+    user = Depends(require_read)
+):
     """
     LLM-friendly health check endpoint following the MCP protocol.
     
@@ -145,7 +172,11 @@ async def llm_health_check(request: Request, context: Optional[MCPContext] = Dep
         )
 
 @router.get("/health/mcp", response_model=LLMToolResponse, tags=["Health"], summary="MCP-specific health check")
-async def mcp_health_check(request: Request, context: Optional[MCPContext] = Depends(get_optional_mcp_context)):
+async def mcp_health_check(
+    request: Request, 
+    context: Optional[MCPContext] = Depends(get_optional_mcp_context),
+    user = Depends(require_read)
+):
     """
     MCP-specific health check endpoint that follows the MCP protocol.
     

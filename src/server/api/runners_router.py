@@ -7,13 +7,36 @@ This module provides endpoints for runner management operations.
 import logging
 import traceback
 from fastapi import APIRouter, Depends, Path, Request
-from typing import Optional
+from typing import Optional, Callable, Any
 
 from ..models import (
     RunnerType, RunnerList, Runner, RunnerScalingParameters,
     LLMToolResponse
 )
 from ..core import BeamClientManager
+
+# Import authentication dependencies if available
+try:
+    from ..auth import require_read, require_write
+except ImportError:
+    # Create dummy auth functions for backward compatibility
+    from fastapi import Depends
+    
+    # Create a dummy UserSession for type hints
+    class UserSession:
+        user_id: str = "anonymous"
+        roles: list = ["admin"]
+    
+    # Create a dummy dependency that just returns a default user
+    async def get_dummy_user():
+        return UserSession()
+    
+    # Create dummy auth dependencies
+    def require_read(func: Callable = None):
+        return get_dummy_user
+        
+    def require_write(func: Callable = None):
+        return get_dummy_user
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +51,15 @@ async def get_client_manager(request: Request) -> BeamClientManager:
 # Runner Management Endpoints
 @router.get("", summary="List available runners")
 async def list_runners(
-    client_manager: BeamClientManager = Depends(get_client_manager)
+    client_manager: BeamClientManager = Depends(get_client_manager),
+    user = Depends(require_read)
 ):
-    """List available runners."""
+    """
+    List available runners.
+    
+    Returns:
+        LLMToolResponse with a list of available runners
+    """
     try:
         print("===== API ENDPOINT: list_runners called =====")
         logger.info("list_runners endpoint called")
@@ -49,231 +78,260 @@ async def list_runners(
         # Create runners directly based on configuration
         direct_runners = []
         
-        # This part is similar to our debug-test endpoint that works
-        for runner_name, runner_config in client_manager.config['runners'].items():
-            if runner_config.get('enabled', False):
-                try:
-                    print(f"API - Processing enabled runner: {runner_name}")
-                    runner_type = RunnerType(runner_name)
-                    client = client_manager.clients.get(runner_name)
-                    
-                    if client and hasattr(client, 'get_runner_info'):
-                        print(f"API - Using get_runner_info for {runner_name}")
-                        try:
-                            runner = await client.get_runner_info()
-                            if runner:
-                                direct_runners.append(runner)
-                                print(f"API - Added runner {runner_name} with get_runner_info")
-                            else:
-                                print(f"API - get_runner_info returned None for {runner_name}")
-                        except Exception as e:
-                            print(f"API - get_runner_info failed for {runner_name}: {str(e)}")
-                            # Fall back to basic info
-                            print(f"API - Falling back to basic info for {runner_name}")
-                            direct_runners.append(Runner(
-                                mcp_resource_id=runner_name,
-                                name=f"{runner_name.capitalize()} Runner",
-                                runner_type=runner_type,
-                                status=RunnerStatus.AVAILABLE,
-                                description=f"Apache Beam {runner_name.capitalize()} runner",
-                                capabilities=[RunnerCapability.BATCH],
-                                config=runner_config.get('pipeline_options', {}),
-                                mcp_provider="apache",
-                                version="1.0.0"
-                            ))
-                            print(f"API - Added basic runner for {runner_name}")
-                    else:
-                        # No client or no get_runner_info method
-                        print(f"API - Creating basic info for {runner_name}")
-                        direct_runners.append(Runner(
-                            mcp_resource_id=runner_name,
-                            name=f"{runner_name.capitalize()} Runner",
-                            runner_type=runner_type,
-                            status=RunnerStatus.AVAILABLE,
-                            description=f"Apache Beam {runner_name.capitalize()} runner",
-                            capabilities=[RunnerCapability.BATCH],
-                            config=runner_config.get('pipeline_options', {}),
-                            mcp_provider="apache",
-                            version="1.0.0"
-                        ))
-                        print(f"API - Added basic runner for {runner_name}")
-                except Exception as e:
-                    print(f"API - Error creating runner for {runner_name}: {str(e)}")
+        # Check direct runner
+        if 'direct' in client_manager.config['runners'] and client_manager.config['runners']['direct'].get('enabled', False):
+            direct_runners.append(Runner(
+                name="Apache Beam Direct Runner",
+                runner_type=RunnerType.DIRECT,
+                status=RunnerStatus.READY,
+                capabilities=[
+                    RunnerCapability.BATCH,
+                    RunnerCapability.LOCAL
+                ],
+                metadata={
+                    "description": "Local direct runner for development and testing",
+                    "location": "localhost"
+                }
+            ))
         
-        # Create a RunnerList object
-        try:
-            # Using direct_runners instead of creating a RunnerList object
-            print(f"API - Direct implementation created list with {len(direct_runners)} runners")
-            
-            # Log the runner types
-            runner_types = [runner.runner_type for runner in direct_runners]
-            print(f"API - Runner types: {runner_types}")
-            
-            # Log each runner
-            for runner in direct_runners:
-                print(f"API - Runner: {runner.name} (type={runner.runner_type})")
-            
-            print("===== API ENDPOINT: list_runners returning direct response =====")
-            logger.info(f"Runner: {runner.name} (type={runner.runner_type})")
-            logger.info("Returning direct response from list_runners endpoint")
-            
-            # Create a simplified response matching what the test expects
-            return LLMToolResponse(
-                success=True,
-                data={
-                    "runners": direct_runners,
-                    "default_runner": "flink",  # Set default runner
-                    "total_count": len(direct_runners)
-                },
-                message=f"Successfully retrieved {len(direct_runners)} runners",
-                error=None
-            )
-        except Exception as inner_e:
-            print(f"===== API ENDPOINT ERROR: {str(inner_e)} =====")
-            print(f"API ERROR traceback: {traceback.format_exc()}")
-            raise inner_e
+        # Check dataflow runner
+        if 'dataflow' in client_manager.config['runners'] and client_manager.config['runners']['dataflow'].get('enabled', False):
+            direct_runners.append(Runner(
+                name="Google Cloud Dataflow",
+                runner_type=RunnerType.DATAFLOW,
+                status=RunnerStatus.READY,
+                capabilities=[
+                    RunnerCapability.BATCH,
+                    RunnerCapability.STREAMING,
+                    RunnerCapability.AUTOSCALING,
+                    RunnerCapability.CLOUD
+                ],
+                metadata={
+                    "description": "Google Cloud Dataflow runner",
+                    "location": client_manager.config['runners']['dataflow'].get('region', 'us-central1'),
+                    "project": client_manager.config['runners']['dataflow'].get('project_id', 'default-project')
+                }
+            ))
+        
+        # Check Spark runner
+        if 'spark' in client_manager.config['runners'] and client_manager.config['runners']['spark'].get('enabled', False):
+            direct_runners.append(Runner(
+                name="Apache Spark",
+                runner_type=RunnerType.SPARK,
+                status=RunnerStatus.READY,
+                capabilities=[
+                    RunnerCapability.BATCH,
+                    RunnerCapability.DISTRIBUTED
+                ],
+                metadata={
+                    "description": "Apache Spark runner",
+                    "spark_master": client_manager.config['runners']['spark'].get('master_url', 'local[*]')
+                }
+            ))
+        
+        # Check Flink runner
+        if 'flink' in client_manager.config['runners'] and client_manager.config['runners']['flink'].get('enabled', False):
+            direct_runners.append(Runner(
+                name="Apache Flink",
+                runner_type=RunnerType.FLINK,
+                status=RunnerStatus.READY,
+                capabilities=[
+                    RunnerCapability.BATCH,
+                    RunnerCapability.STREAMING,
+                    RunnerCapability.DISTRIBUTED,
+                    RunnerCapability.SAVEPOINTS
+                ],
+                metadata={
+                    "description": "Apache Flink runner",
+                    "flink_master": client_manager.config['runners']['flink'].get('master_url', 'localhost:8081')
+                }
+            ))
+        
+        # Create a direct response using the RunnerList model
+        direct_response = RunnerList(
+            runners=direct_runners
+        )
+        
+        # Create LLMToolResponse
+        return LLMToolResponse(
+            success=True,
+            message=f"Successfully listed {len(direct_runners)} runners",
+            data={
+                "runners": [runner.model_dump() for runner in direct_runners]
+            }
+        )
         
     except Exception as e:
-        print(f"===== API ENDPOINT ERROR: {str(e)} =====")
-        logger.error(f"Error listing runners: {str(e)}")
-        logger.error(f"Exception type: {type(e).__name__}")
-        traceback_str = traceback.format_exc()
-        print(f"API ERROR traceback: {traceback_str}")
-        logger.error(f"Traceback: {traceback_str}")
-        
+        tb = traceback.format_exc()
+        logger.error(f"Error listing runners: {str(e)}\n{tb}")
         return LLMToolResponse(
             success=False,
-            data=[],  # Return empty list instead of None
             message=f"Failed to list runners: {str(e)}",
-            error=str(e)
+            data={"runners": []}
         )
 
 @router.get("/debug-test", summary="Test endpoint that directly calls list_runners")
 async def test_list_runners(
-    client_manager: BeamClientManager = Depends(get_client_manager)
+    client_manager: BeamClientManager = Depends(get_client_manager),
+    user = Depends(require_read)
 ):
-    """Test endpoint that directly calls list_runners on the client_manager."""
+    """
+    Test endpoint that directly calls list_runners.
+    
+    Returns:
+        LLMToolResponse with a list of available runners
+    """
     try:
-        print("===== TEST ENDPOINT: direct_list_runners called =====")
+        # Call list_runners directly
+        print("===== API ENDPOINT: test_list_runners called =====")
+        print("Calling client_manager.list_runners() directly via API endpoint")
         
-        # Print out client_manager details for debugging
-        print(f"TEST - client_manager class: {type(client_manager).__name__}")
-        print(f"TEST - client_manager ID: {id(client_manager)}")
-        print(f"TEST - config keys: {list(client_manager.config.keys())}")
-        print(f"TEST - runners config: {list(client_manager.config['runners'].keys())}")
-        print(f"TEST - client keys: {list(client_manager.clients.keys())}")
+        # Get client manager from app state
+        print(f"client_manager ID: {id(client_manager)}")
+        print(f"client_manager class: {type(client_manager).__name__}")
+        print(f"runner config keys: {list(client_manager.config['runners'].keys()) if 'runners' in client_manager.config else []}")
+        print(f"client keys: {list(client_manager.clients.keys())}")
         
-        # Directly call list_runners method like the test script does
-        print("TEST - calling client_manager.list_runners()")
-        runners = await client_manager.list_runners()
+        # Call list_runners directly
+        runners_list = await client_manager.list_runners()
         
-        # Print detailed info about the result
-        print(f"TEST - list_runners returned {len(runners.runners)} runners")
-        for i, runner in enumerate(runners.runners):
-            print(f"TEST - Runner {i+1}: {runner.name} (type={runner.runner_type})")
+        runner_count = len(runners_list.runners)
+        print(f"Found {runner_count} runners")
+        for i, runner in enumerate(runners_list.runners):
+            print(f"Runner {i+1}: {runner.name} (type={runner.runner_type})")
         
-        # Return a simple response with just the raw data
-        return {
-            "success": True,
-            "runner_count": len(runners.runners),
-            "runners": [
-                {
-                    "name": runner.name,
-                    "type": runner.runner_type.value,
-                    "status": runner.status.value 
-                }
-                for runner in runners.runners
-            ]
-        }
+        # Format response
+        return LLMToolResponse(
+            success=True,
+            message=f"Test successful - found {runner_count} runners",
+            data={
+                "runner_count": runner_count,
+                "runners": [
+                    {
+                        "name": runner.name,
+                        "type": runner.runner_type, 
+                        "status": runner.status
+                    }
+                    for runner in runners_list.runners
+                ],
+                "raw_data": runners_list.model_dump() if hasattr(runners_list, "model_dump") else str(runners_list)
+            }
+        )
     except Exception as e:
-        print(f"===== TEST ENDPOINT ERROR: {str(e)} =====")
-        traceback_str = traceback.format_exc()
-        print(f"TEST ERROR traceback: {traceback_str}")
-        return {
-            "success": False,
-            "error": str(e),
-            "traceback": traceback_str
-        }
+        logger.error(f"Error in test_list_runners: {str(e)}")
+        tb = traceback.format_exc()
+        logger.error(tb)
+        return LLMToolResponse(
+            success=False,
+            message=f"Test failed: {str(e)}",
+            data={
+                "error": str(e),
+                "traceback": tb
+            }
+        )
 
 @router.get("/{runner_type}", response_model=LLMToolResponse, summary="Get runner details")
 async def get_runner(
     runner_type: RunnerType = Path(..., description="Runner type to get details for"),
-    client_manager: BeamClientManager = Depends(get_client_manager)
+    client_manager: BeamClientManager = Depends(get_client_manager),
+    user = Depends(require_read)
 ):
-    """Get details for a specific runner."""
+    """
+    Get details for a specific runner.
+    
+    Args:
+        runner_type: Runner type to get details for
+        client_manager: Client manager
+        user: Authentication user
+    
+    Returns:
+        LLMToolResponse with runner details
+    """
     try:
         runner = await client_manager.get_runner(runner_type)
-        return LLMToolResponse(
-            success=True,
-            data=runner.model_dump(),
-            message=f"Successfully retrieved runner details for {runner_type}"
-        )
-    except Exception as e:
-        logger.error(f"Error getting runner details: {str(e)}")
-        traceback_str = traceback.format_exc()
-        logger.error(f"Traceback: {traceback_str}")
+        if not runner:
+            return LLMToolResponse(
+                success=False,
+                message=f"Runner {runner_type} not found or not available",
+                data=None
+            )
         
         return LLMToolResponse(
+            success=True,
+            message=f"Successfully retrieved runner {runner_type}",
+            data=runner.model_dump() if hasattr(runner, "model_dump") else runner
+        )
+    except Exception as e:
+        logger.error(f"Error getting runner {runner_type}: {str(e)}")
+        return LLMToolResponse(
             success=False,
-            data={},  # Return empty dict instead of None
-            message=f"Failed to get runner details: {str(e)}",
-            error=str(e)
+            message=f"Failed to get runner: {str(e)}",
+            data=None
         )
 
 @router.post("/{runner_type}/scale", response_model=LLMToolResponse, summary="Scale runner resources")
 async def scale_runner(
     runner_type: RunnerType = Path(..., description="Runner type to scale"),
     scale_params: RunnerScalingParameters = None,
-    client_manager: BeamClientManager = Depends(get_client_manager)
+    client_manager: BeamClientManager = Depends(get_client_manager),
+    user = Depends(require_write)
 ):
-    """Scale runner resources."""
+    """
+    Scale runner resources.
+    
+    Args:
+        runner_type: Runner type to scale
+        scale_params: Scaling parameters
+        client_manager: Client manager
+        user: Authentication user
+    
+    Returns:
+        LLMToolResponse with scaling result
+    """
     try:
-        # If scale_params is None, create an empty one with required fields
+        # Mock implementation for now
+        from pydantic import BaseModel
+        from typing import Optional
+        
+        class ScaleRequest(BaseModel):
+            min_workers: Optional[int] = None
+            max_workers: Optional[int] = None
+            scaling_algorithm: Optional[str] = None
+            target_cpu_utilization: Optional[float] = None
+            target_throughput_per_worker: Optional[int] = None
+        
         if scale_params is None:
-            from pydantic import BaseModel
-            from ..models.runner import RunnerScalingParameters
-            
-            # Create a simple Pydantic model for the request body
-            class ScaleRequest(BaseModel):
-                min_workers: Optional[int] = None
-                max_workers: Optional[int] = None
-                scaling_algorithm: Optional[str] = None
-                target_cpu_utilization: Optional[float] = None
-                target_throughput_per_worker: Optional[int] = None
-            
-            # Parse request body into our simplified model
-            scale_request = ScaleRequest()
-            
-            # Create a RunnerScalingParameters with the required fields
-            scale_params = RunnerScalingParameters(
-                mcp_resource_id=f"{runner_type.value}-scaling-params",
-                mcp_resource_type="runner_scaling_parameters",
-                min_workers=scale_request.min_workers,
-                max_workers=scale_request.max_workers,
-                scaling_algorithm=scale_request.scaling_algorithm,
-                target_cpu_utilization=scale_request.target_cpu_utilization,
-                target_throughput_per_worker=scale_request.target_throughput_per_worker
+            scale_params = ScaleRequest()
+        
+        # Check if runner exists and supports scaling
+        runner = await client_manager.get_runner(runner_type)
+        if not runner:
+            return LLMToolResponse(
+                success=False,
+                message=f"Runner {runner_type} not found or not available",
+                data=None
             )
-        else:
-            # If scale_params is provided but missing mcp_resource_id, add it
-            if not hasattr(scale_params, 'mcp_resource_id') or not scale_params.mcp_resource_id:
-                scale_params.mcp_resource_id = f"{runner_type.value}-scaling-params"
         
-        # Log the scale parameters
-        logger.info(f"Scaling runner {runner_type} with parameters: {scale_params}")
+        # Only Dataflow supports scaling for now
+        if runner_type != RunnerType.DATAFLOW:
+            return LLMToolResponse(
+                success=False,
+                message=f"Scaling not supported for runner type {runner_type}",
+                data=None
+            )
         
-        # Call the scale_runner method
-        runner = await client_manager.scale_runner(runner_type, scale_params)
+        # Call client manager to scale
+        result = await client_manager.scale_runner(runner_type, scale_params)
+        
         return LLMToolResponse(
             success=True,
-            data=runner.model_dump(),
-            message=f"Successfully scaled runner {runner_type}"
+            message=f"Successfully scaled runner {runner_type}",
+            data=result
         )
     except Exception as e:
-        logger.error(f"Error scaling runner: {str(e)}")
+        logger.error(f"Error scaling runner {runner_type}: {str(e)}")
         return LLMToolResponse(
             success=False,
-            data=None,
             message=f"Failed to scale runner: {str(e)}",
-            error=str(e)
+            data=None
         ) 

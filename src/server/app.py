@@ -33,6 +33,21 @@ from .core.tool_registry import ToolRegistry
 from .core.resource_registry import ResourceRegistry
 from .core.context_registry import ContextRegistry
 
+# Import authentication components - if auth module is not found, disable auth
+try:
+    from .auth import get_auth_config, require_read, require_write
+    from .auth.router import router as auth_router
+    AUTH_MODULE_AVAILABLE = True
+except ImportError:
+    AUTH_MODULE_AVAILABLE = False
+    # Create dummy auth functions for backward compatibility
+    def require_read(func):
+        return func
+    def require_write(func):
+        return func
+    def get_auth_config():
+        return type('AuthConfig', (), {'enabled': False})
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -221,16 +236,85 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> FastAPI:
     app.state.resource_registry = resource_registry
     app.state.context_registry = context_registry
     
-    # Add routers
-    app.include_router(manifest_router, prefix="/api/v1", tags=["manifest"])
-    app.include_router(jobs_router, prefix="/api/v1/jobs", tags=["jobs"])
-    app.include_router(runners_router, prefix="/api/v1/runners", tags=["runners"])
-    app.include_router(metrics_router, prefix="/api/v1/metrics", tags=["metrics"])
-    app.include_router(savepoints_router, prefix="/api/v1/savepoints", tags=["savepoints"])
+    # Check if authentication is enabled
+    auth_enabled = False
+    if AUTH_MODULE_AVAILABLE:
+        auth_config = get_auth_config()
+        auth_enabled = auth_config.enabled
+        logger.info(f"Authentication module found. Auth enabled: {auth_enabled}")
+        
+        # Add auth router
+        app.include_router(auth_router, prefix="/api/v1", tags=["auth"])
+    else:
+        logger.info("Authentication module not found. Auth disabled.")
+    
+    # Add routers with or without authentication
+    # Health endpoints don't require authentication
     app.include_router(health_router, prefix="/api/v1/health", tags=["health"])
-    app.include_router(tools_router, prefix="/api/v1/tools", tags=["tools"])
-    app.include_router(resources_router, prefix="/api/v1/resources", tags=["resources"])
-    app.include_router(contexts_router, prefix="/api/v1/contexts", tags=["contexts"])
+    
+    # Manifest endpoints don't require authentication
+    app.include_router(manifest_router, prefix="/api/v1", tags=["manifest"])
+    
+    # Add other routers with appropriate authentication
+    # For secured endpoints, apply dependency to router level
+    if auth_enabled:
+        # Resources API (secured)
+        app.include_router(
+            resources_router, 
+            prefix="/api/v1/resources", 
+            tags=["resources"]
+        )
+        
+        # Tools API (secured)
+        app.include_router(
+            tools_router, 
+            prefix="/api/v1/tools", 
+            tags=["tools"]
+        )
+        
+        # Contexts API (secured)
+        app.include_router(
+            contexts_router, 
+            prefix="/api/v1/contexts", 
+            tags=["contexts"]
+        )
+        
+        # Jobs API (secured)
+        app.include_router(
+            jobs_router, 
+            prefix="/api/v1/jobs", 
+            tags=["jobs"]
+        )
+        
+        # Runners API (secured)
+        app.include_router(
+            runners_router, 
+            prefix="/api/v1/runners", 
+            tags=["runners"]
+        )
+        
+        # Metrics API (secured)
+        app.include_router(
+            metrics_router, 
+            prefix="/api/v1/metrics", 
+            tags=["metrics"]
+        )
+        
+        # Savepoints API (secured)
+        app.include_router(
+            savepoints_router, 
+            prefix="/api/v1/savepoints", 
+            tags=["savepoints"]
+        )
+    else:
+        # Add routers without authentication
+        app.include_router(resources_router, prefix="/api/v1/resources", tags=["resources"])
+        app.include_router(tools_router, prefix="/api/v1/tools", tags=["tools"])
+        app.include_router(contexts_router, prefix="/api/v1/contexts", tags=["contexts"])
+        app.include_router(jobs_router, prefix="/api/v1/jobs", tags=["jobs"])
+        app.include_router(runners_router, prefix="/api/v1/runners", tags=["runners"])
+        app.include_router(metrics_router, prefix="/api/v1/metrics", tags=["metrics"])
+        app.include_router(savepoints_router, prefix="/api/v1/savepoints", tags=["savepoints"])
     
     # Configure CORS
     app.add_middleware(
@@ -266,6 +350,10 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> FastAPI:
     
     # Add OpenAPI tags metadata
     app.openapi_tags = [
+        {
+            "name": "Auth",
+            "description": "Authentication and authorization operations",
+        },
         {
             "name": "Jobs",
             "description": "Job management operations",

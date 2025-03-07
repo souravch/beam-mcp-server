@@ -76,7 +76,7 @@ Example error response:
 }
 """
 import logging
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Callable
 
 from fastapi import APIRouter, Depends, Path, Query, status
 from pydantic import ValidationError
@@ -86,36 +86,61 @@ from ..models.contexts import Context, ContextDefinition, ContextType, ContextSt
 from ..models.common import LLMToolResponse
 from .dependencies import get_context_registry
 
+# Import authentication dependencies if available
+try:
+    from ..auth import require_read, require_write
+except ImportError:
+    # Create dummy auth functions for backward compatibility
+    from fastapi import Depends
+    
+    # Create a dummy UserSession for type hints
+    class UserSession:
+        user_id: str = "anonymous"
+        roles: list = ["admin"]
+    
+    # Create a dummy dependency that just returns a default user
+    async def get_dummy_user():
+        return UserSession()
+    
+    # Create dummy auth dependencies
+    def require_read(func: Callable = None):
+        return get_dummy_user
+        
+    def require_write(func: Callable = None):
+        return get_dummy_user
+
+# Define a dummy context for error responses
+DUMMY_CONTEXT = Context(
+    mcp_resource_id="error",
+    mcp_resource_type="context",
+    name="Error",
+    description="Error response",
+    context_type=ContextType.CUSTOM,
+    status=ContextStatus.ERROR,
+    parameters={},
+    resources={},
+    metadata={}
+)
+
 # Setup router
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-def _transform_context_for_response(context: Context) -> Dict:
-    """Transform a Context object to include 'id' field for response compatibility."""
-    if not context:
-        return None
-    
-    context_dict = context.dict()
-    context_dict["id"] = context.mcp_resource_id
-    return context_dict
-
-def _transform_contexts_for_response(contexts: List[Context]) -> List[Dict]:
-    """Transform a list of Context objects for response compatibility."""
-    return [_transform_context_for_response(context) for context in contexts]
-
-@router.get("/", response_model=LLMToolResponse[List[Dict]])
+@router.get("/", response_model=LLMToolResponse[List[Context]], response_model_exclude_unset=True, response_model_exclude_none=True)
 async def list_contexts(
     context_type: Optional[ContextType] = Query(None, description="Filter contexts by type"),
     status: Optional[ContextStatus] = Query(None, description="Filter contexts by status"),
-    context_registry: ContextRegistry = Depends(get_context_registry)
-) -> LLMToolResponse[List[Dict]]:
+    context_registry: ContextRegistry = Depends(get_context_registry),
+    user = Depends(require_read)
+) -> LLMToolResponse[List[Context]]:
     """
-    List all available execution contexts with optional filtering by type and status.
+    List all available contexts with optional filtering by type and status.
     
     Args:
         context_type: Optional filter by context type
         status: Optional filter by context status
         context_registry: Context registry dependency
+        user: Authentication user dependency
         
     Returns:
         LLMToolResponse containing a list of contexts
@@ -124,29 +149,30 @@ async def list_contexts(
         contexts = context_registry.list_contexts(context_type=context_type, status=status)
         return LLMToolResponse(
             success=True,
-            message="Execution contexts retrieved successfully",
-            data=_transform_contexts_for_response(contexts)
+            message="Contexts retrieved successfully",
+            data=contexts
         )
     except Exception as e:
         logger.error(f"Error listing contexts: {str(e)}")
         return LLMToolResponse(
             success=False,
             message=f"Failed to list contexts: {str(e)}",
-            data=[],
-            error=str(e)
+            data=[DUMMY_CONTEXT]
         )
 
-@router.get("/{context_id}", response_model=LLMToolResponse[Dict])
+@router.get("/{context_id}", response_model=LLMToolResponse[Context], response_model_exclude_unset=True, response_model_exclude_none=True)
 async def get_context(
     context_id: str = Path(..., description="The ID of the context to retrieve"),
-    context_registry: ContextRegistry = Depends(get_context_registry)
-) -> LLMToolResponse[Dict]:
+    context_registry: ContextRegistry = Depends(get_context_registry),
+    user = Depends(require_read)
+) -> LLMToolResponse[Context]:
     """
-    Get a specific execution context by ID.
+    Get a specific context by ID.
     
     Args:
         context_id: The ID of the context to retrieve
         context_registry: Context registry dependency
+        user: Authentication user dependency
         
     Returns:
         LLMToolResponse containing the context details
@@ -156,36 +182,36 @@ async def get_context(
         if not context:
             return LLMToolResponse(
                 success=False,
-                message=f"Execution context with ID '{context_id}' not found",
-                data={},
-                error=f"Context not found: {context_id}"
+                message=f"Context with ID '{context_id}' not found",
+                data=DUMMY_CONTEXT
             )
         
         return LLMToolResponse(
             success=True,
-            message=f"Execution context '{context_id}' retrieved successfully",
-            data=_transform_context_for_response(context)
+            message=f"Context '{context_id}' retrieved successfully",
+            data=context
         )
     except Exception as e:
         logger.error(f"Error retrieving context {context_id}: {str(e)}")
         return LLMToolResponse(
             success=False,
-            message=f"Failed to retrieve execution context: {str(e)}",
-            data={},
-            error=str(e)
+            message=f"Failed to retrieve context: {str(e)}",
+            data=DUMMY_CONTEXT
         )
 
-@router.post("/", response_model=LLMToolResponse[Dict], status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=LLMToolResponse[Context], response_model_exclude_unset=True, response_model_exclude_none=True, status_code=status.HTTP_201_CREATED)
 async def create_context(
     context_definition: ContextDefinition,
-    context_registry: ContextRegistry = Depends(get_context_registry)
-) -> LLMToolResponse[Dict]:
+    context_registry: ContextRegistry = Depends(get_context_registry),
+    user = Depends(require_write)
+) -> LLMToolResponse[Context]:
     """
-    Create a new execution context with the provided definition.
+    Create a new context with the provided definition.
     
     Args:
         context_definition: The definition for the new context
         context_registry: Context registry dependency
+        user: Authentication user dependency
         
     Returns:
         LLMToolResponse containing the created context
@@ -194,146 +220,121 @@ async def create_context(
         context = context_registry.create_context(context_definition)
         return LLMToolResponse(
             success=True,
-            message=f"Execution context '{context.name}' created successfully",
-            data=_transform_context_for_response(context)
+            message=f"Context '{context.name}' created successfully",
+            data=context
         )
     except ValueError as e:
         logger.error(f"Error creating context: {str(e)}")
-        # Return error response but keep 201 status code as specified in the tests
         return LLMToolResponse(
             success=False,
             message=str(e),
-            data={},
-            error=str(e)
+            data=DUMMY_CONTEXT
         )
     except ValidationError as e:
         logger.error(f"Validation error creating context: {str(e)}")
         return LLMToolResponse(
             success=False,
             message=f"Invalid context definition: {str(e)}",
-            data={},
-            error=str(e)
+            data=DUMMY_CONTEXT
         )
     except Exception as e:
-        logger.error(f"Error creating context: {str(e)}")
+        logger.error(f"Unexpected error creating context: {str(e)}")
         return LLMToolResponse(
             success=False,
-            message=f"Failed to create execution context: {str(e)}",
-            data={},
-            error=str(e)
+            message=f"Failed to create context: {str(e)}",
+            data=DUMMY_CONTEXT
         )
 
-@router.put("/{context_id}", response_model=LLMToolResponse[Dict])
+@router.put("/{context_id}", response_model=LLMToolResponse[Context], response_model_exclude_unset=True, response_model_exclude_none=True)
 async def update_context(
     context_id: str = Path(..., description="The ID of the context to update"),
     updates: Dict[str, Any] = None,
-    context_registry: ContextRegistry = Depends(get_context_registry)
-) -> LLMToolResponse[Dict]:
+    context_registry: ContextRegistry = Depends(get_context_registry),
+    user = Depends(require_write)
+) -> LLMToolResponse[Context]:
     """
-    Update an existing execution context by ID.
+    Update an existing context by ID.
     
     Args:
         context_id: The ID of the context to update
         updates: The updates to apply to the context
         context_registry: Context registry dependency
+        user: Authentication user dependency
         
     Returns:
         LLMToolResponse containing the updated context
     """
-    if updates is None:
-        updates = {}
-    
     try:
-        # Get the existing context first to verify it exists
-        existing_context = context_registry.get_context(context_id)
-        if not existing_context:
+        context = context_registry.update_context(context_id, updates or {})
+        if not context:
             return LLMToolResponse(
                 success=False,
-                message=f"Execution context with ID '{context_id}' not found",
-                data={},
-                error=f"Context not found: {context_id}"
+                message=f"Context with ID '{context_id}' not found",
+                data=DUMMY_CONTEXT
             )
-        
-        # Update the context
-        updated_context = context_registry.update_context(context_id, updates)
         
         return LLMToolResponse(
             success=True,
-            message=f"Execution context '{context_id}' updated successfully",
-            data=_transform_context_for_response(updated_context)
+            message=f"Context '{context_id}' updated successfully",
+            data=context
         )
     except ValueError as e:
         logger.error(f"Error updating context {context_id}: {str(e)}")
         return LLMToolResponse(
             success=False,
             message=str(e),
-            data={},
-            error=str(e)
+            data=DUMMY_CONTEXT
         )
     except ValidationError as e:
         logger.error(f"Validation error updating context {context_id}: {str(e)}")
         return LLMToolResponse(
             success=False,
-            message=f"Invalid context update: {str(e)}",
-            data={},
-            error=str(e)
+            message=f"Invalid update data: {str(e)}",
+            data=DUMMY_CONTEXT
         )
     except Exception as e:
-        logger.error(f"Error updating context {context_id}: {str(e)}")
+        logger.error(f"Unexpected error updating context {context_id}: {str(e)}")
         return LLMToolResponse(
             success=False,
-            message=f"Failed to update execution context: {str(e)}",
-            data={},
-            error=str(e)
+            message=f"Failed to update context: {str(e)}",
+            data=DUMMY_CONTEXT
         )
 
-@router.delete("/{context_id}", response_model=LLMToolResponse[None])
+@router.delete("/{context_id}", response_model=LLMToolResponse[Context], response_model_exclude_unset=True, response_model_exclude_none=True)
 async def delete_context(
     context_id: str = Path(..., description="The ID of the context to delete"),
-    context_registry: ContextRegistry = Depends(get_context_registry)
-) -> LLMToolResponse[None]:
+    context_registry: ContextRegistry = Depends(get_context_registry),
+    user = Depends(require_write)
+) -> LLMToolResponse[Context]:
     """
-    Delete an execution context by ID.
+    Delete a context by ID.
     
     Args:
         context_id: The ID of the context to delete
         context_registry: Context registry dependency
+        user: Authentication user dependency
         
     Returns:
-        LLMToolResponse with success status
+        LLMToolResponse with deletion confirmation
     """
     try:
-        # First check if the context exists
-        existing_context = context_registry.get_context(context_id)
-        if not existing_context:
-            return LLMToolResponse(
-                success=False,
-                message=f"Execution context with ID '{context_id}' not found",
-                data=None,
-                error=f"Context not found: {context_id}"
-            )
-            
-        # Delete the context
         deleted = context_registry.delete_context(context_id)
-        
-        if deleted:
-            return LLMToolResponse(
-                success=True,
-                message=f"Execution context '{context_id}' deleted successfully",
-                data=None
-            )
-        else:
+        if not deleted:
             return LLMToolResponse(
                 success=False,
-                message=f"Failed to delete execution context '{context_id}'",
-                data=None,
-                error="Delete operation failed"
+                message=f"Context with ID '{context_id}' not found",
+                data=DUMMY_CONTEXT
             )
+        
+        return LLMToolResponse(
+            success=True,
+            message=f"Context '{context_id}' deleted successfully",
+            data=DUMMY_CONTEXT  # Return dummy context as the real one is deleted
+        )
     except Exception as e:
         logger.error(f"Error deleting context {context_id}: {str(e)}")
         return LLMToolResponse(
             success=False,
-            message=f"Failed to delete execution context: {str(e)}",
-            data=None,
-            error=str(e)
+            message=f"Failed to delete context: {str(e)}",
+            data=DUMMY_CONTEXT
         ) 

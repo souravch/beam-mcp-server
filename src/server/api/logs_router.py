@@ -11,6 +11,29 @@ from fastapi import APIRouter, Depends, Path, Query, Request
 from ..models import LogList, LLMToolResponse
 from ..core import BeamClientManager
 
+# Import authentication dependencies if available
+try:
+    from ..auth import require_read, require_write
+except ImportError:
+    # Create dummy auth functions for backward compatibility
+    from typing import Callable
+    
+    # Create a dummy UserSession for type hints
+    class UserSession:
+        user_id: str = "anonymous"
+        roles: list = ["admin"]
+    
+    # Create a dummy dependency that just returns a default user
+    async def get_dummy_user():
+        return UserSession()
+    
+    # Create dummy auth dependencies
+    def require_read(func: Callable = None):
+        return get_dummy_user
+        
+    def require_write(func: Callable = None):
+        return get_dummy_user
+
 logger = logging.getLogger(__name__)
 
 # Create router
@@ -27,7 +50,8 @@ async def get_job_logs(
     job_id: str = Path(..., description="Job ID to get logs for"),
     max_results: int = Query(10, description="Maximum number of log entries to return", ge=1, le=1000),
     page_token: Optional[str] = Query(None, description="Token for pagination"),
-    client_manager: BeamClientManager = Depends(get_client_manager)
+    client_manager: BeamClientManager = Depends(get_client_manager),
+    user = Depends(require_read)
 ):
     """
     Get logs for a pipeline job.

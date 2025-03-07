@@ -35,6 +35,30 @@ from src.server.models.common import LLMToolResponse
 from src.server.core.client_manager import BeamClientManager
 from src.server.constants import API_PREFIX, JSON_HEADERS
 
+# Import authentication dependencies if available
+try:
+    from ..auth import require_read, require_write
+except ImportError:
+    # Create dummy auth functions for backward compatibility
+    from fastapi import Depends
+    from typing import Callable, Any
+    
+    # Create a dummy UserSession for type hints
+    class UserSession:
+        user_id: str = "anonymous"
+        roles: list = ["admin"]
+    
+    # Create a dummy dependency that just returns a default user
+    async def get_dummy_user():
+        return UserSession()
+    
+    # Create dummy auth dependencies
+    def require_read(func: Callable = None):
+        return get_dummy_user
+        
+    def require_write(func: Callable = None):
+        return get_dummy_user
+
 logger = logging.getLogger(__name__)
 
 # Create router - Remove the prefix since it's already included in app.py
@@ -50,184 +74,247 @@ async def get_client_manager(request: Request) -> BeamClientManager:
 async def create_job(
     job_params: JobParameters, 
     background_tasks: BackgroundTasks,
-    client_manager: BeamClientManager = Depends(get_client_manager)
+    client_manager: BeamClientManager = Depends(get_client_manager),
+    user = Depends(require_write)
 ):
     """
-    Create and launch a data pipeline job on the specified runner.
+    Create a new pipeline job.
     
-    This endpoint creates a new pipeline job using the provided parameters. It supports different runners
-    including Dataflow, Spark, and Flink. You can specify either a template path or code path to define
-    the pipeline logic.
-    
-    - For template-based jobs, provide the template_path and template_parameters
-    - For code-based jobs, provide the code_path
-    
-    Example usage by LLM:
-    - Create a batch job to process daily customer data
-    - Launch a streaming job for real-time event processing
-    - Set up a Spark job for data transformation
+    Args:
+        job_params: Job parameters
+        background_tasks: Background tasks
+        client_manager: Client manager
+        user: Authentication user
+        
+    Returns:
+        LLMToolResponse with job creation result
     """
     try:
+        # Validate input
+        if not job_params.runner_type:
+            return LLMToolResponse(
+                success=False,
+                message="Missing runner_type",
+                data=None
+            )
+        
         # Create job
-        job = await client_manager.create_job(job_params)
+        job = await client_manager.create_job(job_params, background_tasks)
+        
+        response_data = {
+            "job_id": job.job_id,
+            "runner_type": job.runner_type,
+            "job_type": job.job_type,
+            "status": job.status,
+            "job_name": job.job_name
+        }
+        
         return LLMToolResponse(
             success=True,
-            data=job.model_dump(),
-            message=f"Successfully created job {job.job_id}"
+            message=f"Created job {job.job_id} on {job.runner_type}",
+            data=response_data
         )
     except Exception as e:
         logger.error(f"Error creating job: {str(e)}")
         return LLMToolResponse(
             success=False,
-            data=None,
             message=f"Failed to create job: {str(e)}",
-            error=str(e)
+            data=None
         )
 
-@router.get("", response_model=LLMToolResponse, summary="List pipeline jobs")
+@router.get("", response_model=LLMToolResponse, summary="List all jobs")
 async def list_jobs(
-    runner_type: Optional[RunnerType] = Query(None, description="Filter by runner type"),
-    job_type: Optional[JobType] = Query(None, description="Filter by job type"),
-    page_size: int = Query(10, description="Number of jobs to return", ge=1, le=100),
-    page_token: Optional[str] = Query(None, description="Token for pagination"),
-    client_manager: BeamClientManager = Depends(get_client_manager)
+    status: Optional[str] = Query(None, description="Filter by job status"),
+    runner: Optional[str] = Query(None, description="Filter by runner type"),
+    limit: int = Query(100, description="Maximum number of jobs to return"),
+    offset: int = Query(0, description="Offset for pagination"),
+    client_manager: BeamClientManager = Depends(get_client_manager),
+    user = Depends(require_read)
 ):
-    """List all jobs."""
+    """
+    List all pipeline jobs with optional filtering.
+    
+    Args:
+        status: Filter by job status
+        runner: Filter by runner type
+        limit: Maximum number of jobs to return
+        offset: Offset for pagination
+        client_manager: Client manager
+        user: Authentication user
+        
+    Returns:
+        LLMToolResponse with job list
+    """
     try:
-        # Try to get the jobs from the client manager
-        try:
-            jobs = await client_manager.list_jobs(
-                runner_type=runner_type,
-                job_type=job_type,
-                page_size=page_size,
-                page_token=page_token
-            )
-            
-            # Manually serialize the job info to avoid validation errors
-            job_list = []
-            for job in jobs.jobs:
-                try:
-                    # Convert each job to a dictionary
-                    job_dict = {
-                        "job_id": job.job_id,
-                        "job_name": job.job_name,
-                        "runner": job.runner,
-                        "status": job.status,
-                        "create_time": job.create_time.isoformat() if job.create_time else None,
-                        "update_time": job.update_time.isoformat() if job.update_time else None,
-                    }
-                    job_list.append(job_dict)
-                except Exception as job_err:
-                    logger.error(f"Error processing job: {str(job_err)}")
-                    # Skip this job and continue
-                    
-            return LLMToolResponse(
-                success=True,
-                data=job_list,
-                message=f"Successfully retrieved {len(job_list)} jobs"
-            )
-            
-        except Exception as inner_err:
-            logger.error(f"Error in list_jobs inner block: {str(inner_err)}")
-            # Fall back to a simpler approach
-            
-            # Get a list of all job IDs from clients
-            all_jobs = []
-            for client_name, client in client_manager.clients.items():
-                if hasattr(client, 'list_job_ids'):
-                    job_ids = await client.list_job_ids()
-                    for job_id in job_ids:
-                        try:
-                            job = await client.get_job(job_id)
-                            all_jobs.append({
-                                "job_id": job_id,
-                                "job_name": job.job_name if hasattr(job, 'job_name') else "Unknown",
-                                "runner": client_name,
-                                "status": job.status if hasattr(job, 'status') else "UNKNOWN"
-                            })
-                        except Exception:
-                            # Skip this job
-                            pass
-                            
-            return LLMToolResponse(
-                success=True,
-                data=all_jobs,
-                message=f"Successfully retrieved {len(all_jobs)} jobs"
-            )
-    except Exception as e:
-        logger.error(f"Error listing jobs: {str(e)}")
-        # Return an empty success response to pass the test
+        # Debug print parameters
+        logger.debug(f"list_jobs called with: status={status}, runner={runner}")
+        
+        # Initialize client manager - should be done in app startup
+        if not client_manager.initialized:
+            logger.debug("Initializing client manager from list_jobs")
+            try:
+                # This shouldn't run, should be initialized at startup
+                await client_manager.initialize()
+            except Exception as init_err:
+                logger.error(f"Error initializing client manager: {str(init_err)}")
+                return LLMToolResponse(
+                    success=False,
+                    message=f"Client manager initialization error: {str(init_err)}",
+                    data={"jobs": []}
+                )
+        
+        # List jobs from client manager
+        job_list = await client_manager.list_jobs(
+            status=status,
+            runner=runner,
+            limit=limit,
+            offset=offset
+        )
+        
+        # Convert job list to response
+        jobs_data = []
+        for job in job_list.jobs:
+            job_dict = {
+                "job_id": job.job_id,
+                "job_name": job.job_name,
+                "runner_type": job.runner_type.value if hasattr(job.runner_type, "value") else job.runner_type,
+                "job_type": job.job_type.value if hasattr(job.job_type, "value") else job.job_type,
+                "status": job.status.value if hasattr(job.status, "value") else job.status,
+                "created_at": job.created_at.isoformat() if job.created_at else None,
+                "updated_at": job.updated_at.isoformat() if job.updated_at else None
+            }
+            if job.metrics and hasattr(job.metrics, "model_dump"):
+                job_dict["metrics"] = job.metrics.model_dump()
+            jobs_data.append(job_dict)
+        
+        response_data = {
+            "jobs": jobs_data,
+            "next_page_token": job_list.next_page_token,
+            "total_size": job_list.total_size
+        }
+        
+        # Return response
         return LLMToolResponse(
             success=True,
-            data=[],
-            message="Successfully retrieved 0 jobs"
+            message=f"Retrieved {len(jobs_data)} jobs",
+            data=response_data
+        )
+    except Exception as e:
+        logger.error(f"Error listing jobs: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        
+        return LLMToolResponse(
+            success=False,
+            message=f"Failed to list jobs: {str(e)}",
+            data={"jobs": []}
         )
 
 @router.get("/{job_id}", response_model=LLMToolResponse, summary="Get job details")
 async def get_job(
     job_id: str = Path(..., description="Job ID to retrieve"),
-    client_manager: BeamClientManager = Depends(get_client_manager)
+    client_manager: BeamClientManager = Depends(get_client_manager),
+    user = Depends(require_read)
 ):
-    """Get job details."""
+    """
+    Get details for a specific job.
+    
+    Args:
+        job_id: Job ID to retrieve
+        client_manager: Client manager
+        user: Authentication user
+        
+    Returns:
+        LLMToolResponse with job details
+    """
     try:
         job = await client_manager.get_job(job_id)
+        if not job:
+            return LLMToolResponse(
+                success=False,
+                message=f"Job {job_id} not found",
+                data=None
+            )
+        
         return LLMToolResponse(
             success=True,
-            data=job.model_dump(),
-            message=f"Successfully retrieved job {job_id}"
+            message=f"Retrieved job {job_id}",
+            data=job
         )
     except Exception as e:
-        logger.error(f"Error getting job: {str(e)}")
+        logger.error(f"Error getting job {job_id}: {str(e)}")
         return LLMToolResponse(
             success=False,
-            data=None,
             message=f"Failed to get job: {str(e)}",
-            error=str(e)
+            data=None
         )
 
 @router.put("/{job_id}", response_model=LLMToolResponse, summary="Update job configuration")
 async def update_job(
     job_id: str = Path(..., description="Job ID to update"),
     update_params: JobUpdateParameters = None,
-    client_manager: BeamClientManager = Depends(get_client_manager)
+    client_manager: BeamClientManager = Depends(get_client_manager),
+    user = Depends(require_write)
 ):
-    """Update job configuration."""
+    """
+    Update job configuration.
+    
+    Args:
+        job_id: Job ID to update
+        update_params: Parameters to update
+        client_manager: Client manager
+        user: Authentication user
+        
+    Returns:
+        LLMToolResponse with update result
+    """
     try:
-        job = await client_manager.update_job(job_id, update_params)
+        updated_job = await client_manager.update_job(job_id, update_params)
         return LLMToolResponse(
             success=True,
-            data=job.model_dump(),
-            message=f"Successfully updated job {job_id}"
+            message=f"Job {job_id} updated successfully",
+            data=updated_job
         )
     except Exception as e:
-        logger.error(f"Error updating job: {str(e)}")
+        logger.error(f"Error updating job {job_id}: {str(e)}")
         return LLMToolResponse(
             success=False,
-            data=None,
             message=f"Failed to update job: {str(e)}",
-            error=str(e)
+            data=None
         )
 
-@router.delete("/{job_id}", response_model=LLMToolResponse, summary="Cancel job")
+@router.delete("/{job_id}", response_model=LLMToolResponse, summary="Cancel a job")
 async def cancel_job(
     job_id: str = Path(..., description="Job ID to cancel"),
-    client_manager: BeamClientManager = Depends(get_client_manager)
+    mode: JobCancelMode = Query(JobCancelMode.DRAIN, description="Cancellation mode"),
+    client_manager: BeamClientManager = Depends(get_client_manager),
+    user = Depends(require_write)
 ):
-    """Cancel a running job."""
+    """
+    Cancel a job.
+    
+    Args:
+        job_id: Job ID to cancel
+        mode: Cancellation mode
+        client_manager: Client manager
+        user: Authentication user
+        
+    Returns:
+        LLMToolResponse with cancellation result
+    """
     try:
-        await client_manager.cancel_job(job_id)
+        job = await client_manager.cancel_job(job_id)
         return LLMToolResponse(
             success=True,
-            data={"job_id": job_id},
-            message=f"Successfully cancelled job {job_id}"
+            message=f"Job {job_id} cancelled successfully",
+            data=job
         )
     except Exception as e:
-        logger.error(f"Error cancelling job: {str(e)}")
+        logger.error(f"Error canceling job {job_id}: {str(e)}")
         return LLMToolResponse(
             success=False,
-            data=None,
             message=f"Failed to cancel job: {str(e)}",
-            error=str(e)
+            data=None
         )
 
 @router.get("/{job_id}/status", response_model=LLMToolResponse, summary="Get job status")
@@ -235,258 +322,398 @@ async def get_job_status(
     job_id: str = Path(..., description="Job ID to get status for"),
     client_manager: BeamClientManager = Depends(get_client_manager)
 ):
-    """Get job status."""
+    """
+    Get job status.
+    
+    Args:
+        job_id: Job ID to get status for
+        client_manager: Client manager
+        
+    Returns:
+        LLMToolResponse with job status
+    """
     try:
         job = await client_manager.get_job(job_id)
+        if not job:
+            return LLMToolResponse(
+                success=False,
+                message=f"Job {job_id} not found",
+                data=None
+            )
+        
         return LLMToolResponse(
             success=True,
-            data={"job_id": job_id, "status": job.status, "current_state": job.current_state},
-            message=f"Successfully retrieved status for job {job_id}"
+            message=f"Retrieved status for job {job_id}",
+            data={"status": job.status}
         )
     except Exception as e:
-        logger.error(f"Error getting job status: {str(e)}")
+        logger.error(f"Error getting job status for {job_id}: {str(e)}")
         return LLMToolResponse(
             success=False,
-            data=None,
             message=f"Failed to get job status: {str(e)}",
-            error=str(e)
+            data=None
         )
 
 @router.post("/{job_id}/savepoints", response_model=LLMToolResponse, summary="Create a savepoint")
 async def create_savepoint(
     job_id: str = Path(..., description="Job ID to create savepoint for"),
     savepoint_params: SavepointRequest = None,
-    client_manager: BeamClientManager = Depends(get_client_manager)
+    client_manager: BeamClientManager = Depends(get_client_manager),
+    user = Depends(require_write)
 ):
-    """Create a savepoint for a job."""
+    """
+    Create a savepoint for a job.
+    
+    Args:
+        job_id: Job ID to create savepoint for
+        savepoint_params: Savepoint parameters
+        client_manager: Client manager
+        user: Authentication user
+        
+    Returns:
+        LLMToolResponse with savepoint creation result
+    """
+    if savepoint_params is None:
+        savepoint_params = SavepointRequest()
+        
     try:
-        # Validation checks
-        if job_id not in client_manager.jobs:
+        # Check if job exists
+        job = await client_manager.get_job(job_id)
+        if not job:
             return LLMToolResponse(
                 success=False,
-                data=None,
                 message=f"Job {job_id} not found",
-                error="Job not found"
+                data=None
             )
             
-        # Special test handling - detect if we're in a test environment
-        is_test = 'pytest' in sys.modules
-        
-        # If in test mode, create a direct savepoint response
-        if is_test:
-            logger.info(f"Test mode detected, creating direct savepoint response for job {job_id}")
-            
-            # Create a basic savepoint object
-            savepoint_id = f"sp-test-{str(uuid.uuid4())}"
-            now = datetime.utcnow().isoformat() + "Z"
-            
-            # Create directly in PENDING state for testing
-            savepoint = Savepoint(
-                savepoint_id=savepoint_id,
-                job_id=job_id,
-                status=SavepointStatus.PENDING,  # Start with PENDING for test
-                create_time=now,
-                savepoint_path="/tmp/flink-savepoints",
-                mcp_parent_job=job_id,
-                mcp_resource_id=savepoint_id
-            )
-            
-            # Store the savepoint for the get endpoint to find
-            if not hasattr(client_manager, 'savepoints'):
-                client_manager.savepoints = {}
-            
-            client_manager.savepoints[savepoint_id] = {
-                "savepoint": savepoint,
-                "job_id": job_id,
-                "create_time": now,
-                # Will be used by get_savepoint to transition state
-                "test_created": True
-            }
-            
-            logger.info(f"Created test savepoint: {savepoint_id}")
-            
+        # Check if job supports savepoints
+        if job.runner_type not in [RunnerType.FLINK]:
             return LLMToolResponse(
-                success=True,
-                data=savepoint.model_dump(),
-                message=f"Successfully created test savepoint for job {job_id}"
+                success=False,
+                message=f"Savepoints not supported for runner type {job.runner_type}",
+                data=None
             )
         
-        # Prepare the savepoint request
-        # If params not provided (testing), create a default one
-        if savepoint_params is None:
-            savepoint_params = SavepointRequest(
-                job_id=job_id,
-                savepoint_path="/tmp/savepoints",
-                drain=False
-            )
-        
-        # Get the job and runner info
-        job = client_manager.jobs[job_id]
-        
-        try:
-            # Create the savepoint
-            logger.info(f"Creating savepoint for job {job_id}")
-            savepoint = await client_manager.create_savepoint(job_id, savepoint_params)
-            
-            # Return success response
-            return LLMToolResponse(
-                success=True,
-                data=savepoint.model_dump(),
-                message=f"Successfully created savepoint for job {job_id}"
-            )
-        except Exception as e:
-            logger.error(f"Error creating savepoint via client manager: {str(e)}")
-            # Fall through to the general error handling
-            raise
-                
-    except Exception as e:
-        logger.error(f"Error creating savepoint: {str(e)}")
-        return LLMToolResponse(
-            success=False,
-            data=None,
-            message=f"Failed to create savepoint: {str(e)}",
-            error=str(e)
+        # Create savepoint
+        savepoint = await client_manager.create_savepoint(
+            job_id, 
+            savepoint_type=savepoint_params.savepoint_type,
+            cancel_job=savepoint_params.cancel_job,
+            savepoint_path=savepoint_params.savepoint_path
         )
-
-@router.get("/{job_id}/savepoints/{savepoint_id}", response_model=LLMToolResponse, summary="Get savepoint status")
-async def get_savepoint(
-    job_id: str = Path(..., description="Job ID"),
-    savepoint_id: str = Path(..., description="Savepoint ID"),
-    client_manager: BeamClientManager = Depends(get_client_manager)
-):
-    """Get the status of a savepoint."""
-    try:
-        # Special test handling - detect if we're in a test environment
-        is_test = 'pytest' in sys.modules
         
-        # If in test mode and we have the savepoint stored, handle state transition
-        if is_test and hasattr(client_manager, 'savepoints') and savepoint_id in client_manager.savepoints:
-            logger.info(f"Test mode detected, handling savepoint {savepoint_id} for job {job_id}")
-            
-            # Get the stored savepoint
-            savepoint_data = client_manager.savepoints[savepoint_id]
-            savepoint = savepoint_data["savepoint"]
-            
-            # Check if this is for the correct job
-            if savepoint_data["job_id"] != job_id:
-                return LLMToolResponse(
-                    success=False,
-                    data=None,
-                    message=f"Savepoint {savepoint_id} does not belong to job {job_id}",
-                    error="Savepoint not found for job"
-                )
-            
-            # For testing, automatically transition the state to COMPLETED
-            if savepoint.status == SavepointStatus.PENDING:
-                # Update to COMPLETED
-                now = datetime.utcnow().isoformat() + "Z"
-                savepoint = Savepoint(
-                    savepoint_id=savepoint_id,
-                    job_id=job_id,
-                    status=SavepointStatus.COMPLETED,  # Transition to COMPLETED
-                    create_time=savepoint.create_time,
-                    complete_time=now,
-                    savepoint_path="/tmp/flink-savepoints",
-                    mcp_parent_job=job_id,
-                    mcp_resource_id=savepoint_id
-                )
-                
-                # Update the stored savepoint
-                savepoint_data["savepoint"] = savepoint
-                
-                logger.info(f"Transitioned test savepoint {savepoint_id} to COMPLETED")
-            
-            return LLMToolResponse(
-                success=True,
-                data=savepoint.model_dump(),
-                message=f"Successfully retrieved savepoint {savepoint_id} for job {job_id}"
-            )
+        # Format response data
+        response_data = {
+            "savepoint_id": savepoint.savepoint_id,
+            "job_id": savepoint.job_id,
+            "savepoint_type": savepoint.savepoint_type,
+            "status": savepoint.status,
+            "created_at": savepoint.created_at.isoformat() if savepoint.created_at else None
+        }
         
-        # Check if job exists first
-        if job_id not in client_manager.jobs:
-            return LLMToolResponse(
-                success=False,
-                data=None,
-                message=f"Job {job_id} not found",
-                error="Job not found"
-            )
-        
-        # Normal flow - use client manager
-        savepoint = await client_manager.get_savepoint(job_id, savepoint_id)
-        
-        if not savepoint:
-            return LLMToolResponse(
-                success=False,
-                data=None,
-                message=f"Savepoint {savepoint_id} not found for job {job_id}",
-                error="Savepoint not found"
-            )
+        # Include optional fields if present
+        if savepoint.location:
+            response_data["location"] = savepoint.location
+        if savepoint.error:
+            response_data["error"] = savepoint.error
+        if savepoint.updated_at:
+            response_data["updated_at"] = savepoint.updated_at.isoformat()
         
         return LLMToolResponse(
             success=True,
-            data=savepoint.model_dump(),
-            message=f"Successfully retrieved savepoint {savepoint_id} for job {job_id}"
+            message=f"Created savepoint for job {job_id}",
+            data=response_data
         )
     except Exception as e:
-        logger.error(f"Error getting savepoint: {str(e)}")
+        # Handle savepoint creation error
+        logger.error(f"Error creating savepoint for job {job_id}: {str(e)}")
+        
+        # Create a default response with error details
+        response_data = {
+            "savepoint_id": str(uuid.uuid4()),
+            "job_id": job_id,
+            "savepoint_type": savepoint_params.savepoint_type if savepoint_params else "SAVEPOINT",
+            "status": SavepointStatus.FAILED,
+            "error": str(e),
+            "created_at": datetime.utcnow().isoformat()
+        }
+        
         return LLMToolResponse(
             success=False,
-            data=None, 
+            message=f"Failed to create savepoint: {str(e)}",
+            data=response_data
+        )
+
+@router.get("/{job_id}/savepoints/{savepoint_id}", response_model=LLMToolResponse, summary="Get savepoint details")
+async def get_savepoint(
+    job_id: str = Path(..., description="Job ID"),
+    savepoint_id: str = Path(..., description="Savepoint ID"),
+    client_manager: BeamClientManager = Depends(get_client_manager),
+    user = Depends(require_read)
+):
+    """
+    Get savepoint status.
+    
+    Args:
+        job_id: Job ID
+        savepoint_id: Savepoint ID
+        client_manager: Client manager
+        user: Authentication user
+        
+    Returns:
+        LLMToolResponse with savepoint status
+    """
+    try:
+        # Check if job exists
+        job = await client_manager.get_job(job_id)
+        if not job:
+            return LLMToolResponse(
+                success=False,
+                message=f"Job {job_id} not found",
+                data=None
+            )
+            
+        # Check if job supports savepoints
+        if job.runner_type not in [RunnerType.FLINK]:
+            return LLMToolResponse(
+                success=False,
+                message=f"Savepoints not supported for runner type {job.runner_type}",
+                data=None
+            )
+        
+        # Get savepoint status
+        savepoint = await client_manager.get_savepoint(job_id, savepoint_id)
+        if not savepoint:
+            return LLMToolResponse(
+                success=False,
+                message=f"Savepoint {savepoint_id} not found for job {job_id}",
+                data=None
+            )
+        
+        # Format response data
+        response_data = {
+            "savepoint_id": savepoint.savepoint_id,
+            "job_id": savepoint.job_id,
+            "savepoint_type": savepoint.savepoint_type,
+            "status": savepoint.status,
+            "created_at": savepoint.created_at.isoformat() if savepoint.created_at else None
+        }
+        
+        # Include optional fields if present
+        if savepoint.location:
+            response_data["location"] = savepoint.location
+        if savepoint.error:
+            response_data["error"] = savepoint.error
+        if savepoint.updated_at:
+            response_data["updated_at"] = savepoint.updated_at.isoformat()
+        
+        return LLMToolResponse(
+            success=True,
+            message=f"Retrieved savepoint {savepoint_id} for job {job_id}",
+            data=response_data
+        )
+    except Exception as e:
+        # Handle savepoint retrieval error
+        logger.error(f"Error getting savepoint {savepoint_id} for job {job_id}: {str(e)}")
+        
+        # Create a default response with error details
+        response_data = {
+            "savepoint_id": savepoint_id,
+            "job_id": job_id,
+            "status": "ERROR",
+            "error": str(e)
+        }
+        
+        return LLMToolResponse(
+            success=False,
             message=f"Failed to get savepoint: {str(e)}",
-            error=str(e)
+            data=response_data
         )
 
 @router.get("/{job_id}/savepoints", response_model=LLMToolResponse, summary="List savepoints")
 async def list_savepoints(
     job_id: str = Path(..., description="Job ID to list savepoints for"),
-    client_manager: BeamClientManager = Depends(get_client_manager)
+    client_manager: BeamClientManager = Depends(get_client_manager),
+    user = Depends(require_read)
 ):
-    """List savepoints for a job."""
+    """
+    List all savepoints for a job.
+    
+    Args:
+        job_id: Job ID to list savepoints for
+        client_manager: Client manager
+        user: Authentication user
+        
+    Returns:
+        LLMToolResponse with savepoint list
+    """
     try:
+        # Check if job exists
+        job = await client_manager.get_job(job_id)
+        if not job:
+            return LLMToolResponse(
+                success=False,
+                message=f"Job {job_id} not found",
+                data={"savepoints": []}
+            )
+            
+        # Check if job supports savepoints
+        if job.runner_type not in [RunnerType.FLINK]:
+            return LLMToolResponse(
+                success=False,
+                message=f"Savepoints not supported for runner type {job.runner_type}",
+                data={"savepoints": []}
+            )
+        
+        # List savepoints
         savepoints = await client_manager.list_savepoints(job_id)
+        
+        # Format response data
+        savepoints_data = []
+        for sp in savepoints:
+            sp_dict = {
+                "savepoint_id": sp.savepoint_id,
+                "job_id": sp.job_id,
+                "savepoint_type": sp.savepoint_type,
+                "status": sp.status,
+                "created_at": sp.created_at.isoformat() if sp.created_at else None
+            }
+            if sp.location:
+                sp_dict["location"] = sp.location
+            if sp.error:
+                sp_dict["error"] = sp.error
+            if sp.updated_at:
+                sp_dict["updated_at"] = sp.updated_at.isoformat()
+            savepoints_data.append(sp_dict)
+        
         return LLMToolResponse(
             success=True,
-            data=savepoints.model_dump(),
-            message=f"Successfully retrieved savepoints for job {job_id}"
+            message=f"Retrieved {len(savepoints_data)} savepoints for job {job_id}",
+            data={"savepoints": savepoints_data}
         )
     except Exception as e:
-        logger.error(f"Error listing savepoints: {str(e)}")
+        logger.error(f"Error listing savepoints for job {job_id}: {str(e)}")
         return LLMToolResponse(
             success=False,
-            data=None,
             message=f"Failed to list savepoints: {str(e)}",
-            error=str(e)
+            data={"savepoints": []}
         )
 
 @router.get("/{job_id}/metrics", response_model=LLMToolResponse, summary="Get job metrics")
 async def get_job_metrics(
     job_id: str = Path(..., description="Job ID to get metrics for"),
-    client_manager: BeamClientManager = Depends(get_client_manager)
+    client_manager: BeamClientManager = Depends(get_client_manager),
+    user = Depends(require_read)
 ):
-    """Get metrics for a job."""
+    """
+    Get metrics for a job.
+    
+    Args:
+        job_id: Job ID to get metrics for
+        client_manager: Client manager
+        user: Authentication user
+        
+    Returns:
+        LLMToolResponse with job metrics
+    """
     try:
         # Check if job exists
-        if job_id not in client_manager.jobs:
+        job = await client_manager.get_job(job_id)
+        if not job:
             return LLMToolResponse(
                 success=False,
-                data=None,
                 message=f"Job {job_id} not found",
-                error="Job not found"
+                data=None
             )
-            
-        # Get metrics from client manager
-        metrics = await client_manager.get_job_metrics(job_id)
+        
+        # Get metrics - job should have metrics property
+        metrics = job.metrics if hasattr(job, "metrics") else {}
+        
+        # Convert to dict if not already
+        if hasattr(metrics, "model_dump"):
+            metrics = metrics.model_dump()
         
         return LLMToolResponse(
             success=True,
-            data=metrics.model_dump(),
-            message=f"Successfully retrieved metrics for job {job_id}"
+            message=f"Retrieved metrics for job {job_id}",
+            data=metrics or {}
         )
     except Exception as e:
-        logger.error(f"Error getting job metrics: {str(e)}")
+        logger.error(f"Error getting metrics for job {job_id}: {str(e)}")
         return LLMToolResponse(
             success=False,
-            data=None,
             message=f"Failed to get job metrics: {str(e)}",
-            error=str(e)
+            data={}
+        )
+
+@router.post("/{job_id}/restart", response_model=LLMToolResponse, summary="Restart a job")
+async def restart_job(
+    job_id: str = Path(..., description="Job ID to restart"),
+    client_manager: BeamClientManager = Depends(get_client_manager),
+    user = Depends(require_write)
+):
+    """
+    Restart a job.
+    
+    Args:
+        job_id: Job ID to restart
+        client_manager: Client manager
+        user: Authentication user
+        
+    Returns:
+        LLMToolResponse with restart result
+    """
+    try:
+        job = await client_manager.restart_job(job_id)
+        return LLMToolResponse(
+            success=True,
+            message=f"Job {job_id} restarted successfully",
+            data=job
+        )
+    except Exception as e:
+        logger.error(f"Error restarting job {job_id}: {str(e)}")
+        return LLMToolResponse(
+            success=False,
+            message=f"Failed to restart job: {str(e)}",
+            data=None
+        )
+
+@router.get("/{job_id}/logs", response_model=LLMToolResponse, summary="Get job logs")
+async def get_job_logs(
+    job_id: str = Path(..., description="Job ID to get logs for"),
+    client_manager: BeamClientManager = Depends(get_client_manager),
+    user = Depends(require_read)
+):
+    """
+    Get job logs.
+    
+    Args:
+        job_id: Job ID to get logs for
+        client_manager: Client manager
+        user: Authentication user
+        
+    Returns:
+        LLMToolResponse with job logs
+    """
+    try:
+        # Get job logs
+        logs = await client_manager.get_job_logs(job_id)
+        if not logs:
+            return LLMToolResponse(
+                success=False,
+                message=f"Job {job_id} not found or no logs available",
+                data=None
+            )
+        
+        return LLMToolResponse(
+            success=True,
+            message=f"Retrieved logs for job {job_id}",
+            data=logs
+        )
+    except Exception as e:
+        logger.error(f"Error getting logs for job {job_id}: {str(e)}")
+        return LLMToolResponse(
+            success=False,
+            message=f"Failed to get job logs: {str(e)}",
+            data=None
         ) 

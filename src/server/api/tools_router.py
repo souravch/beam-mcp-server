@@ -89,6 +89,30 @@ from ..models.tools import Tool, ToolDefinition, ToolType, ToolStatus
 from ..models.common import LLMToolResponse
 from .dependencies import get_tool_registry
 
+# Import authentication dependencies if available
+try:
+    from ..auth import require_read, require_write
+except ImportError:
+    # Create dummy auth functions for backward compatibility
+    from fastapi import Depends
+    from typing import Callable, Any
+    
+    # Create a dummy UserSession for type hints
+    class UserSession:
+        user_id: str = "anonymous"
+        roles: list = ["admin"]
+    
+    # Create a dummy dependency that just returns a default user
+    async def get_dummy_user():
+        return UserSession()
+    
+    # Create dummy auth dependencies
+    def require_read(func: Callable = None):
+        return get_dummy_user
+        
+    def require_write(func: Callable = None):
+        return get_dummy_user
+
 # Setup router
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -109,7 +133,8 @@ DUMMY_TOOL = Tool(
 @router.get("/", response_model=LLMToolResponse[List[Tool]], response_model_exclude_unset=True, response_model_exclude_none=True)
 async def list_tools(
     tool_type: Optional[str] = None,
-    tool_registry: ToolRegistry = Depends(get_tool_registry)
+    tool_registry: ToolRegistry = Depends(get_tool_registry),
+    user = Depends(require_read)
 ) -> LLMToolResponse[List[Tool]]:
     """
     List all available tools, optionally filtered by type.
@@ -139,7 +164,8 @@ async def list_tools(
 @router.get("/{tool_id}", response_model=LLMToolResponse[Tool], response_model_exclude_unset=True, response_model_exclude_none=True)
 async def get_tool(
     tool_id: str = Path(..., description="The ID of the tool to retrieve"),
-    tool_registry: ToolRegistry = Depends(get_tool_registry)
+    tool_registry: ToolRegistry = Depends(get_tool_registry),
+    user = Depends(require_read)
 ) -> LLMToolResponse[Tool]:
     """
     Get a specific tool by ID.
@@ -175,7 +201,8 @@ async def get_tool(
 @router.post("/", response_model=LLMToolResponse[Tool], response_model_exclude_unset=True, response_model_exclude_none=True, status_code=status.HTTP_201_CREATED)
 async def create_tool(
     tool_definition: ToolDefinition,
-    tool_registry: ToolRegistry = Depends(get_tool_registry)
+    tool_registry: ToolRegistry = Depends(get_tool_registry),
+    user = Depends(require_write)
 ) -> LLMToolResponse[Tool]:
     """
     Create a new tool with the provided definition.
@@ -220,7 +247,8 @@ async def create_tool(
 async def update_tool(
     tool_id: str = Path(..., description="The ID of the tool to update"),
     tool_definition: ToolDefinition = None,
-    tool_registry: ToolRegistry = Depends(get_tool_registry)
+    tool_registry: ToolRegistry = Depends(get_tool_registry),
+    user = Depends(require_write)
 ) -> LLMToolResponse[Tool]:
     """
     Update an existing tool.
@@ -271,7 +299,8 @@ async def update_tool(
 @router.delete("/{tool_id}", response_model=LLMToolResponse[None], response_model_exclude_unset=True, response_model_exclude_none=True)
 async def delete_tool(
     tool_id: str = Path(..., description="The ID of the tool to delete"),
-    tool_registry: ToolRegistry = Depends(get_tool_registry)
+    tool_registry: ToolRegistry = Depends(get_tool_registry),
+    user = Depends(require_write)
 ) -> LLMToolResponse[None]:
     """
     Delete a tool.
@@ -308,7 +337,8 @@ async def delete_tool(
 async def invoke_tool(
     tool_id: str = Path(..., description="The ID of the tool to invoke"),
     parameters: Dict[str, Any] = None,
-    tool_registry: ToolRegistry = Depends(get_tool_registry)
+    tool_registry: ToolRegistry = Depends(get_tool_registry),
+    user = Depends(require_read)
 ) -> LLMToolResponse[Dict[str, Any]]:
     """
     Invoke a tool with the provided parameters.

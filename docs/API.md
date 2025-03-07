@@ -4,11 +4,18 @@
 - [Apache Beam MCP Server API Documentation](#apache-beam-mcp-server-api-documentation)
   - [Table of Contents](#table-of-contents)
   - [Introduction](#introduction)
+  - [Authentication](#authentication)
+    - [Enabling Authentication](#enabling-authentication)
+    - [OAuth 2.0 Login Flow](#oauth-20-login-flow)
+    - [Obtaining an Access Token](#obtaining-an-access-token)
+    - [Using Access Tokens](#using-access-tokens)
+    - [Token Refresh](#token-refresh)
+    - [Role-Based Access Control](#role-based-access-control)
+    - [Test Authentication](#test-authentication)
   - [General API Conventions](#general-api-conventions)
     - [Response Format](#response-format)
     - [Error Handling](#error-handling)
     - [Field Inclusion Behavior](#field-inclusion-behavior)
-    - [Authentication](#authentication)
   - [Resources API](#resources-api)
     - [Endpoints](#endpoints)
     - [Resource Object](#resource-object)
@@ -24,6 +31,152 @@
 ## Introduction
 
 The Apache Beam MCP Server provides a RESTful API for managing Beam pipelines, resources, tools, and execution contexts. This document describes the API endpoints, request/response formats, and usage patterns.
+
+## Authentication
+
+The Apache Beam MCP Server uses OAuth 2.0 with JWT (JSON Web Tokens) for authentication. By default, authentication is **disabled** for easy development and testing. 
+
+### Enabling Authentication
+
+To enable authentication, you need to set the following environment variables:
+
+```
+# Basic authentication config
+MCP_AUTH_ENABLED=true
+MCP_JWT_SECRET_KEY=your-secure-random-key
+MCP_JWT_ALGORITHM=HS256
+MCP_ACCESS_TOKEN_EXPIRE_MINUTES=30
+MCP_REFRESH_TOKEN_EXPIRE_DAYS=7
+
+# Rate limiting (optional)
+MCP_RATE_LIMIT_ENABLED=true
+MCP_RATE_LIMIT_MAX_REQUESTS=100
+MCP_RATE_LIMIT_WINDOW_SECONDS=3600
+```
+
+You'll also need to configure at least one OAuth 2.0 provider:
+
+**Google OAuth**:
+```
+MCP_OAUTH2_GOOGLE_CLIENT_ID=your-google-client-id
+MCP_OAUTH2_GOOGLE_CLIENT_SECRET=your-google-client-secret
+```
+
+**GitHub OAuth**:
+```
+MCP_OAUTH2_GITHUB_CLIENT_ID=your-github-client-id
+MCP_OAUTH2_GITHUB_CLIENT_SECRET=your-github-client-secret
+```
+
+### OAuth 2.0 Login Flow
+
+To authenticate with an OAuth provider:
+
+1. Direct users to: `/api/v1/auth/login/{provider}?redirect_uri={your_redirect_uri}`
+   - `provider`: Either `google` or `github`
+   - `redirect_uri`: (Optional) Where to redirect after successful authentication
+
+2. The user will be redirected to the provider's login page, and then back to your application with tokens.
+
+### Obtaining an Access Token
+
+For existing OAuth tokens, you can exchange them for MCP tokens:
+
+```
+POST /api/v1/auth/refresh
+```
+
+Request body:
+```json
+{
+  "refresh_token": "your-refresh-token"
+}
+```
+
+Response:
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer",
+  "expires_in": 1800,
+  "user": {
+    "user_id": "google:123456789",
+    "email": "user@example.com",
+    "name": "John Doe",
+    "roles": ["viewer"],
+    "provider": "google",
+    "created_at": "2023-10-31T12:00:00Z",
+    "last_login": "2023-10-31T12:00:00Z"
+  }
+}
+```
+
+### Using Access Tokens
+
+Include the access token in the `Authorization` header of your requests:
+
+```
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+Example with curl:
+```bash
+curl http://localhost:8888/api/v1/resources \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+Example with Python:
+```python
+import requests
+
+headers = {
+    "Authorization": f"Bearer {access_token}"
+}
+response = requests.get("http://localhost:8888/api/v1/resources", headers=headers)
+```
+
+### Token Refresh
+
+Access tokens expire after 30 minutes by default. Use the refresh token to obtain a new access token:
+
+```
+POST /api/v1/auth/refresh
+```
+
+Request body:
+```json
+{
+  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+### Role-Based Access Control
+
+The API uses a simplified role-based access control system with two roles:
+
+| Role | Permissions |
+|------|------------|
+| admin | Read and write access to all endpoints |
+| viewer | Read-only access to all endpoints |
+
+Read operations include GET requests to list or retrieve resources, tools, contexts, etc.  
+Write operations include POST, PUT, DELETE requests to create, update, delete resources, tools, contexts, etc.
+
+### Test Authentication
+
+For development and testing, you can enable a bypass token:
+
+```
+MCP_AUTH_ALLOW_TEST_BYPASS=true
+MCP_AUTH_TEST_BYPASS_TOKEN=your-test-token
+```
+
+This token can be used in the Authorization header without going through the OAuth flow:
+
+```
+Authorization: Bearer your-test-token
+```
 
 ## General API Conventions
 
@@ -73,10 +226,6 @@ API responses may exclude fields that:
 - Have unset values (defaults)
 
 Clients should not rely on all fields being present in every response. Always check for the existence of fields before accessing them.
-
-### Authentication
-
-Authentication is handled through standard HTTP authentication mechanisms. See the deployment documentation for details.
 
 ## Resources API
 
