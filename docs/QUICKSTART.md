@@ -130,7 +130,9 @@ beam-mcp-server/
 
 ## Next Steps
 
-- See [DESIGN.md](DESIGN.md) for architecture details
-- Check [mcp-compliance.md](mcp-compliance.md) for MCP protocol information
-- Explore [llm_integration.md](llm_integration.md) for LLM integration
-- Run the examples in `examples/` directory 
+Once you have the server running, here are some next steps:
+
+- Test the server using the provided examples in `examples/`
+- Check [mcp_protocol_compliance.md](mcp_protocol_compliance.md) for MCP protocol information
+- Explore the [User Guide & LLM Integration](mcp/user_guide_llm_integration.md) for complete usage instructions
+- Read the API documentation to understand available endpoints 

@@ -1,4 +1,8 @@
-# MCP Compliance Guide
+# MCP Protocol Compliance
+
+> **Note:** For a comprehensive guide on using the Beam MCP Server, including LLM integration, 
+> please refer to the [User Guide & LLM Integration](./mcp/user_guide_llm_integration.md) document.
+> This document focuses specifically on MCP protocol compliance details.
 
 This document explains how the Apache Beam MCP Server implements the [Model Context Protocol (MCP)](https://github.com/llm-mcp/mcp-spec), a standard for AI/LLM tool interactions.
 

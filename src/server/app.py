@@ -48,6 +48,13 @@ except ImportError:
     def get_auth_config():
         return type('AuthConfig', (), {'enabled': False})
 
+# Import MCP integration
+try:
+    from .mcp.app_integration import integrate_mcp_with_app
+    MCP_MODULE_AVAILABLE = True
+except ImportError:
+    MCP_MODULE_AVAILABLE = False
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -247,6 +254,17 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> FastAPI:
         app.include_router(auth_router, prefix="/api/v1", tags=["auth"])
     else:
         logger.info("Authentication module not found. Auth disabled.")
+    
+    # Add MCP protocol support
+    if MCP_MODULE_AVAILABLE:
+        try:
+            mcp_components = integrate_mcp_with_app(app)
+            logger.info("MCP protocol support initialized.")
+        except Exception as e:
+            logger.error(f"Failed to initialize MCP protocol support: {e}")
+            logger.exception(e)
+    else:
+        logger.info("MCP protocol module not found. MCP protocol support disabled.")
     
     # Add routers with or without authentication
     # Health endpoints don't require authentication

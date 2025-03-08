@@ -184,14 +184,14 @@ curl -X POST "http://localhost:8888/api/v1/contexts/" \
   }'
 ```
 
-These MCP standard endpoints integrate seamlessly with Beam's core functionality to provide a complete solution for managing data pipelines. For detailed examples and use cases, see the [MCP Compliance & Examples](docs/mcp-compliance.md).
+These MCP standard endpoints integrate seamlessly with Beam's core functionality to provide a complete solution for managing data pipelines. For detailed examples and use cases, see the [MCP Protocol Compliance](docs/mcp_protocol_compliance.md).
 
 ## Documentation
 
 - [Developer Quickstart](docs/QUICKSTART.md) - Get set up for development
 - [System Design](docs/DESIGN.md) - Architecture and implementation details
-- [MCP Compliance & Examples](docs/mcp-compliance.md) - MCP protocol implementation with real-world examples
-- [LLM Integration](docs/llm_integration.md) - AI/LLM integration guide
+- [MCP Protocol Compliance](docs/mcp_protocol_compliance.md) - MCP protocol implementation details
+- [User Guide & LLM Integration](docs/mcp/user_guide_llm_integration.md) - Comprehensive guide for using the server and LLM integration
 - [Kubernetes Deployment](docs/kubernetes_deployment.md) - Kubernetes deployment guide
 - [Cloud Optimization](docs/cloud_optimization.md) - Cloud environment optimization guide
 - [Local Environment Requirements](tests/README.md#local-environment-requirements) - Setup requirements for local testing
@@ -261,3 +261,41 @@ To run the tests:
 ## License
 
 This project is licensed under the Apache License 2.0.
+
+## MCP Implementation Status
+
+The MCP (Model Context Protocol) implementation is divided into phases:
+
+### Phase 1: Core Connection Lifecycle (COMPLETED)
+
+- ✅ Connection initialization
+- ✅ Connection state management
+- ✅ Basic capability negotiation
+- ✅ HTTP transport with SSE
+- ✅ JSON-RPC message handling
+- ✅ Error handling
+
+### Phase 2: Full Capability Negotiation (COMPLETED)
+
+- ✅ Enhanced capability compatibility checking
+- ✅ Semantic version compatibility for features
+- ✅ Support levels for features (required, preferred, optional, experimental)
+- ✅ Capability property validation
+- ✅ Capability-based API endpoint control
+- ✅ Feature router integration with FastAPI
+
+### Phase 3: Advanced Message Handling (COMPLETED)
+
+- ✅ Structured message types
+- ✅ Message validation
+- ✅ Improved error handling
+- ✅ Batch message processing
+
+### Phase 4: Production Optimization (TODO)
+
+- ⬜ Performance optimizations
+- ⬜ Monitoring and metrics
+- ⬜ Advanced security features
+- ⬜ High availability support
+
+When building clients to interact with the MCP server, you must follow the Model Context Protocol. For details, see the [MCP Protocol Compliance](docs/mcp_protocol_compliance.md).

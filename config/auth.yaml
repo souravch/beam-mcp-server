@@ -1,0 +1,58 @@
+# Base configuration from default.yaml
+service:
+  name: beam-mcp
+  type: beam
+  version: 1.0.0
+
+default_runner: direct
+
+gcp:
+  project_id: your-gcp-project-id
+  region: us-central1
+
+mcp:
+  version: 1.0
+  server_name: beam-mcp-server
+  provider: apache
+  streaming_support: true
+  log_level: INFO
+
+api:
+  prefix: /api/v1
+  cors_origins:
+    - "*"
+  base_url: http://localhost:8888
+
+runners:
+  direct:
+    type: direct
+    display_name: Direct Runner
+    description: Local execution runner for Apache Beam
+
+# Authentication settings
+auth:
+  enabled: true
+  jwt_secret_key: your-secure-random-key-at-least-32-chars-long
+  jwt_algorithm: HS256
+  access_token_expire_minutes: 30
+  refresh_token_expire_days: 7
+  allow_test_bypass: true
+  test_bypass_token: test-bypass-token
+  
+  # OAuth2 providers
+  oauth2_providers:
+    google:
+      # Replace with your actual Google OAuth credentials
+      client_id: YOUR_GOOGLE_CLIENT_ID
+      client_secret: YOUR_GOOGLE_CLIENT_SECRET
+      scopes:
+        - openid
+        - email
+        - profile
+    github:
+      # Replace with your actual GitHub OAuth credentials
+      client_id: YOUR_GITHUB_CLIENT_ID
+      client_secret: YOUR_GITHUB_CLIENT_SECRET
+      scopes:
+        - user:email
+        - read:user 

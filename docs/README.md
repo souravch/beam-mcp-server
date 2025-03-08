@@ -2,12 +2,17 @@
 
 Welcome to the Apache Beam MCP Server documentation! This project provides a standardized server that implements the Model Context Protocol (MCP) for managing Apache Beam pipelines across different runners.
 
-## Quick Navigation
+## Available Documentation
 
-- **[System Design](DESIGN.md)** - Architecture, components, and implementation details
-- **[API Documentation](API.md)** - Comprehensive guide to using the REST API
-- **[MCP Compliance](mcp-compliance.md)** - How this server implements the Model Context Protocol
-- **[LLM Integration](llm_integration.md)** - Guide for integrating with LLMs for AI-controlled pipelines
+Here you'll find all the documentation for the Apache Beam MCP Server:
+
+- **[Quickstart Guide](QUICKSTART.md)** - Get started quickly with the Beam MCP Server
+- **[System Design](DESIGN.md)** - Architecture and implementation details
+- **[MCP Protocol Compliance](mcp_protocol_compliance.md)** - How this server implements the Model Context Protocol
+- **[User Guide & LLM Integration](mcp/user_guide_llm_integration.md)** - Comprehensive guide for using the server and LLM integration
+- **[Kubernetes Deployment](kubernetes_deployment.md)** - How to deploy on Kubernetes
+- **[Cloud Optimization](cloud_optimization.md)** - Best practices for cloud deployments
+- **[Troubleshooting](TROUBLESHOOTING.md)** - Solutions to common problems
 
 ## Getting Started
 

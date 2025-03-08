@@ -63,4 +63,8 @@ google-cloud-storage>=2.7.0
 
 # Optional: Dataframe support
 pandas>=1.5.0,<2.0.0
-pyarrow>=10.0.0 
+pyarrow>=10.0.0
+
+# Add Redis and SSE Starlette to existing requirements
+redis>=4.5.0
+sse-starlette>=1.6.1 
