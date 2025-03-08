@@ -7,7 +7,7 @@ ensuring that all messages conform to the expected structure and content.
 
 from enum import Enum
 from typing import Dict, List, Any, Optional, Union, Literal, TypeVar, Generic
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, validator, root_validator, model_validator
 import json
 import logging
 from datetime import datetime, UTC
@@ -127,19 +127,16 @@ class JsonRpcResponse(BaseModel):
             raise ValueError(f"Invalid JSON-RPC version: {v}")
         return v
     
-    @root_validator
-    def validate_result_or_error(cls, values):
+    @model_validator(mode='after')
+    def validate_result_or_error(self) -> 'JsonRpcResponse':
         """Validate that either result or error is present, but not both."""
-        result = values.get("result")
-        error = values.get("error")
-        
-        if result is not None and error is not None:
+        if self.result is not None and self.error is not None:
             raise ValueError("Response cannot contain both result and error")
         
-        if result is None and error is None:
+        if self.result is None and self.error is None:
             raise ValueError("Response must contain either result or error")
-        
-        return values
+            
+        return self
 
 
 class JsonRpcBatchRequest(BaseModel):
