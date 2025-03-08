@@ -36,110 +36,119 @@ def setup_mcp(
     # Create capability registry
     registry = CapabilityRegistry(
         server_name=server_name,
-        server_version=server_version,
-        protocol_version="1.0"
+        server_version=server_version
     )
+    registry._protocol_version = "1.0"
     
     # Register core MCP capabilities
     registry.register_feature(
         "core.jsonrpc",
+        version="2.0",
         properties={
             "version": "2.0",
             "methods": ["initialize", "shutdown", "jsonrpc"]
-        },
-        level=FeatureCapabilityLevel.REQUIRED,
-        version_compatibility=VersionCompatibility.EXACT
+        }
     )
+    registry.set_feature_level("core.jsonrpc", FeatureCapabilityLevel.REQUIRED)
+    registry.set_feature_version_compatibility("core.jsonrpc", VersionCompatibility.EXACT)
     
     registry.register_feature(
         "core.transport.http",
+        version="1.0",
         properties={
             "version": "1.0",
             "supportedMethods": ["POST"]
-        },
-        level=FeatureCapabilityLevel.REQUIRED,
-        version_compatibility=VersionCompatibility.COMPATIBLE
+        }
     )
+    registry.set_feature_level("core.transport.http", FeatureCapabilityLevel.REQUIRED)
     
     registry.register_feature(
         "core.transport.sse",
+        version="1.0",
         properties={
             "version": "1.0"
-        },
-        level=FeatureCapabilityLevel.REQUIRED,
-        version_compatibility=VersionCompatibility.COMPATIBLE
+        }
     )
+    registry.set_feature_level("core.transport.sse", FeatureCapabilityLevel.REQUIRED)
+    registry.set_feature_version_compatibility("core.transport.sse", VersionCompatibility.COMPATIBLE)
     
     # Register resource capabilities
     registry.register_feature(
         "resource.types",
+        version="1.0",
         properties={
             "supportedTypes": ["file", "dataset", "model", "schema"],
             "maxSize": 104857600  # 100 MB
-        },
-        level=FeatureCapabilityLevel.OPTIONAL,
-        version_compatibility=VersionCompatibility.COMPATIBLE
+        }
     )
+    registry.set_feature_level("resource.types", FeatureCapabilityLevel.OPTIONAL)
+    registry.set_feature_version_compatibility("resource.types", VersionCompatibility.COMPATIBLE)
     
     # Register tool capabilities
     registry.register_feature(
         "tool.runner_management",
+        version="1.0",
         properties={
             "supportedRunners": ["direct", "flink", "dataflow", "spark"]
-        },
-        level=FeatureCapabilityLevel.OPTIONAL,
-        version_compatibility=VersionCompatibility.COMPATIBLE
+        }
     )
+    registry.set_feature_level("tool.runner_management", FeatureCapabilityLevel.OPTIONAL)
+    registry.set_feature_version_compatibility("tool.runner_management", VersionCompatibility.COMPATIBLE)
     
     registry.register_feature(
         "tool.job_management",
+        version="1.0",
         properties={
             "supportedActions": ["create", "list", "cancel", "pause", "resume"]
-        },
-        level=FeatureCapabilityLevel.OPTIONAL,
-        version_compatibility=VersionCompatibility.COMPATIBLE
+        }
     )
+    registry.set_feature_level("tool.job_management", FeatureCapabilityLevel.OPTIONAL)
+    registry.set_feature_version_compatibility("tool.job_management", VersionCompatibility.COMPATIBLE)
     
     registry.register_feature(
         "tool.pipeline_monitoring",
+        version="1.0",
         properties={
             "metrics": True,
             "logs": True,
             "events": True
-        },
-        level=FeatureCapabilityLevel.OPTIONAL,
-        version_compatibility=VersionCompatibility.COMPATIBLE
+        }
     )
+    registry.set_feature_level("tool.pipeline_monitoring", FeatureCapabilityLevel.OPTIONAL)
+    registry.set_feature_version_compatibility("tool.pipeline_monitoring", VersionCompatibility.COMPATIBLE)
     
     # Register Beam-specific capabilities
     registry.register_feature(
         "beam.runners",
+        version="1.0",
         properties={
             "supported": ["direct", "flink", "dataflow", "spark"],
             "default": "direct"
-        },
-        level=FeatureCapabilityLevel.OPTIONAL,
-        version_compatibility=VersionCompatibility.COMPATIBLE
+        }
     )
+    registry.set_feature_level("beam.runners", FeatureCapabilityLevel.OPTIONAL)
+    registry.set_feature_version_compatibility("beam.runners", VersionCompatibility.COMPATIBLE)
     
     registry.register_feature(
         "beam.job_types",
+        version="1.0",
         properties={
             "supported": ["BATCH", "STREAMING"]
-        },
-        level=FeatureCapabilityLevel.OPTIONAL,
-        version_compatibility=VersionCompatibility.COMPATIBLE
+        }
     )
+    registry.set_feature_level("beam.job_types", FeatureCapabilityLevel.OPTIONAL)
+    registry.set_feature_version_compatibility("beam.job_types", VersionCompatibility.COMPATIBLE)
     
     registry.register_feature(
         "beam.sdk",
+        version="1.0",
         properties={
             "language": "python",
             "version": "2.50.0"
-        },
-        level=FeatureCapabilityLevel.OPTIONAL,
-        version_compatibility=VersionCompatibility.COMPATIBLE
+        }
     )
+    registry.set_feature_level("beam.sdk", FeatureCapabilityLevel.OPTIONAL)
+    registry.set_feature_version_compatibility("beam.sdk", VersionCompatibility.COMPATIBLE)
     
     # Create connection manager
     connection_manager = ConnectionManager(redis_url)

@@ -103,7 +103,7 @@ async def create_job(
         
         response_data = {
             "job_id": job.job_id,
-            "runner_type": job.runner_type,
+            "runner_type": job.runner,
             "job_type": job.job_type,
             "status": job.status,
             "job_name": job.job_name
@@ -111,7 +111,7 @@ async def create_job(
         
         return LLMToolResponse(
             success=True,
-            message=f"Created job {job.job_id} on {job.runner_type}",
+            message=f"Created job {job.job_id} on {job.runner}",
             data=response_data
         )
     except Exception as e:

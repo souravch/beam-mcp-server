@@ -8,10 +8,11 @@ import logging
 import traceback
 from fastapi import APIRouter, Depends, Path, Request
 from typing import Optional, Callable, Any
+import uuid
 
 from ..models import (
     RunnerType, RunnerList, Runner, RunnerScalingParameters,
-    LLMToolResponse
+    LLMToolResponse, RunnerStatus, RunnerCapability
 )
 from ..core import BeamClientManager
 
@@ -83,15 +84,17 @@ async def list_runners(
             direct_runners.append(Runner(
                 name="Apache Beam Direct Runner",
                 runner_type=RunnerType.DIRECT,
-                status=RunnerStatus.READY,
+                status=RunnerStatus.AVAILABLE,
                 capabilities=[
                     RunnerCapability.BATCH,
-                    RunnerCapability.LOCAL
                 ],
                 metadata={
                     "description": "Local direct runner for development and testing",
                     "location": "localhost"
-                }
+                },
+                mcp_resource_id=f"runner-direct-{uuid.uuid4()}",
+                description="Apache Beam Direct Runner for local development and testing",
+                version="2.50.0"
             ))
         
         # Check dataflow runner
@@ -99,18 +102,20 @@ async def list_runners(
             direct_runners.append(Runner(
                 name="Google Cloud Dataflow",
                 runner_type=RunnerType.DATAFLOW,
-                status=RunnerStatus.READY,
+                status=RunnerStatus.AVAILABLE,
                 capabilities=[
                     RunnerCapability.BATCH,
                     RunnerCapability.STREAMING,
                     RunnerCapability.AUTOSCALING,
-                    RunnerCapability.CLOUD
                 ],
                 metadata={
                     "description": "Google Cloud Dataflow runner",
                     "location": client_manager.config['runners']['dataflow'].get('region', 'us-central1'),
                     "project": client_manager.config['runners']['dataflow'].get('project_id', 'default-project')
-                }
+                },
+                mcp_resource_id=f"runner-dataflow-{uuid.uuid4()}",
+                description="Google Cloud Dataflow runner for GCP",
+                version="2.50.0"
             ))
         
         # Check Spark runner
@@ -118,15 +123,17 @@ async def list_runners(
             direct_runners.append(Runner(
                 name="Apache Spark",
                 runner_type=RunnerType.SPARK,
-                status=RunnerStatus.READY,
+                status=RunnerStatus.AVAILABLE,
                 capabilities=[
-                    RunnerCapability.BATCH,
-                    RunnerCapability.DISTRIBUTED
+                    RunnerCapability.BATCH
                 ],
                 metadata={
                     "description": "Apache Spark runner",
-                    "spark_master": client_manager.config['runners']['spark'].get('master_url', 'local[*]')
-                }
+                    "location": client_manager.config['runners']['spark'].get('spark_master', 'local[*]')
+                },
+                mcp_resource_id=f"runner-spark-{uuid.uuid4()}",
+                description="Apache Spark runner for distributed processing",
+                version="3.2.0"
             ))
         
         # Check Flink runner
@@ -134,40 +141,60 @@ async def list_runners(
             direct_runners.append(Runner(
                 name="Apache Flink",
                 runner_type=RunnerType.FLINK,
-                status=RunnerStatus.READY,
+                status=RunnerStatus.AVAILABLE,
                 capabilities=[
                     RunnerCapability.BATCH,
-                    RunnerCapability.STREAMING,
-                    RunnerCapability.DISTRIBUTED,
-                    RunnerCapability.SAVEPOINTS
                 ],
                 metadata={
                     "description": "Apache Flink runner",
-                    "flink_master": client_manager.config['runners']['flink'].get('master_url', 'localhost:8081')
-                }
+                    "location": client_manager.config['runners']['flink'].get('jobmanager_address', 'localhost:8081')
+                },
+                mcp_resource_id=f"runner-flink-{uuid.uuid4()}",
+                description="Apache Flink runner for stream and batch processing",
+                version="1.17.0"
             ))
         
-        # Create a direct response using the RunnerList model
-        direct_response = RunnerList(
-            runners=direct_runners
-        )
-        
-        # Create LLMToolResponse
-        return LLMToolResponse(
-            success=True,
-            message=f"Successfully listed {len(direct_runners)} runners",
-            data={
-                "runners": [runner.model_dump() for runner in direct_runners]
+        # Create response with direct runners
+        try:
+            direct_response = RunnerList(
+                runners=direct_runners,
+                default_runner=client_manager.config.get('default_runner', 'direct'),
+                mcp_resource_id=f"runner-list-{uuid.uuid4()}",
+                mcp_total_runners=len(direct_runners)
+            )
+            
+            return {
+                "success": True,
+                "data": {
+                    "runners": [runner.model_dump() for runner in direct_runners],
+                    "default_runner": client_manager.config.get('default_runner', 'direct'),
+                    "total_count": len(direct_runners)
+                }
             }
-        )
-        
+        except Exception as e:
+            logger.error(f"Error listing runners: {e}")
+            
+            # If the model validation fails, return a simpler response
+            return {
+                "success": False,
+                "data": {
+                    "runners": [],
+                    "default_runner": client_manager.config.get('default_runner', 'direct'),
+                    "total_count": 0
+                },
+                "error": str(e)
+            }
     except Exception as e:
+        logger.error(f"Error listing runners: {e}")
         tb = traceback.format_exc()
-        logger.error(f"Error listing runners: {str(e)}\n{tb}")
+        logger.error(tb)
         return LLMToolResponse(
             success=False,
             message=f"Failed to list runners: {str(e)}",
-            data={"runners": []}
+            data={
+                "error": str(e),
+                "traceback": tb
+            }
         )
 
 @router.get("/debug-test", summary="Test endpoint that directly calls list_runners")

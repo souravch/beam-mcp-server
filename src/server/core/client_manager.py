@@ -159,12 +159,13 @@ class BeamClientManager:
             return client
         return self
     
-    async def create_job(self, params: JobParameters) -> JobInfo:
+    async def create_job(self, params: JobParameters, background_tasks=None) -> JobInfo:
         """
         Create a new job
         
         Args:
             params (JobParameters): Job parameters
+            background_tasks: Optional FastAPI background tasks object
             
         Returns:
             JobInfo: Created job information

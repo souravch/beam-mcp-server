@@ -1,4 +1,5 @@
-from pydantic import BaseSettings, Field, validator
+from pydantic import Field
+from pydantic_settings import BaseSettings
 from typing import Optional
 
 
@@ -21,9 +22,10 @@ class MCPSettings(BaseSettings):
     # Connection expiration (seconds)
     connection_expiry: int = Field(1800, env="MCP_CONNECTION_EXPIRY")
     
-    class Config:
-        env_prefix = ""
-        case_sensitive = False
+    model_config = {
+        "env_prefix": "",
+        "case_sensitive": False
+    }
 
 
 def get_mcp_settings() -> MCPSettings:
