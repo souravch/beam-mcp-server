@@ -13,7 +13,7 @@ echo "Apache Beam MCP Server - End-to-End Test Runner"
 echo "========================================================"
 
 # Default values
-CONFIG_PATH="config/flink_config.yaml"
+CONFIG_PATH="config/test_config_with_mcp.yaml"
 SERVER_PORT=8888
 SKIP_FLINK_CHECK=false
 WAIT_TIME=5
@@ -102,19 +102,18 @@ if [ "$SKIP_FLINK_CHECK" = false ]; then
     fi
 fi
 
-# Check for Spark installation
-echo "Checking Spark installation..."
-if ! command -v spark-submit &> /dev/null; then
-    echo "Warning: Spark not found in PATH. Spark runner tests may fail."
-    echo "To install Spark, follow the instructions at https://spark.apache.org/downloads/"
-else
-    SPARK_HOME=$(dirname $(dirname $(which spark-submit)))
-    echo "Found Spark installation at $SPARK_HOME"
+# Check if Redis is running - required for MCP tests
+echo "Checking Redis server..."
+if ! command -v redis-cli &> /dev/null || ! redis-cli ping > /dev/null 2>&1; then
+    echo "Warning: Redis server not found or not running."
+    echo "Redis is required for MCP protocol tests."
+    echo "To install Redis, follow instructions at https://redis.io/download"
+    echo "Then start Redis with: redis-server"
 fi
 
 # Run the end-to-end tests
 echo "========================================================"
-echo "Running end-to-end tests..."
+echo "Running end-to-end tests with configuration: $CONFIG_PATH"
 echo "========================================================"
 python3 scripts/e2e_test.py --config "$CONFIG_PATH" --port "$SERVER_PORT"
 
