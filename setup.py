@@ -3,8 +3,22 @@ from setuptools import setup, find_packages
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
-with open("requirements.txt", "r", encoding="utf-8") as f:
-    requirements = [line.strip() for line in f.readlines()]
+def parse_requirements(filename):
+    """Parse requirements from requirements.txt file."""
+    with open(filename, "r", encoding="utf-8") as f:
+        requirements = []
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#'):
+                # Remove any comments
+                line = line.split('#')[0].strip()
+                # Skip editable installs
+                if not line.startswith('-e'):
+                    requirements.append(line)
+        return requirements
+
+# Get requirements from requirements.txt
+requirements = parse_requirements("requirements.txt")
 
 setup(
     name="beam-mcp-server",
@@ -25,22 +39,23 @@ setup(
         "Operating System :: OS Independent",
     ],
     python_requires=">=3.9",
-    install_requires=[
-        "fastapi>=0.104.0",
-        "uvicorn[standard]>=0.24.0",
-        "pydantic>=2.5.0",
-        "pydantic-settings>=2.0.0",
-        "mcp>=1.2.1",
-        "apache-beam[gcp]>=2.50.0",
-    ],
+    install_requires=requirements,
     extras_require={
         "dev": [
-            "pytest>=7.4.3",
-            "pytest-asyncio>=0.23.2",
-            "pytest-cov>=4.1.0",
-            "black>=23.11.0",
-            "isort>=5.12.0",
+            # Testing and development
+            "pytest>=7.0.0,<8.0.0",
+            "pytest-asyncio>=0.16.0,<1.0.0",
             "flake8>=6.1.0",
+            "marshmallow>=3.20.1",
+            "kubernetes>=28.1.0",
+            "gitpython>=3.1.40",
+            
+            # Code formatting and type checking
+            "black>=22.0.0,<23.0.0",
+            "isort>=5.10.0,<6.0.0",
+            "mypy>=1.0.0,<2.0.0",
+            "types-PyYAML>=6.0.0,<7.0.0",
+            "types-requests>=2.26.0,<3.0.0",
         ],
     },
     entry_points={
