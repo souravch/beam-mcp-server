@@ -38,7 +38,7 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    python_requires=">=3.9",
+    python_requires=">=3.12.0",
     install_requires=requirements,
     extras_require={
         "dev": [
