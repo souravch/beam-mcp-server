@@ -11,8 +11,6 @@ import os
 import argparse
 import logging
 import uvicorn
-import sys
-from src.server.app import create_app
 from src.server.config import Settings
 
 # Configure logging
